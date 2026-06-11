@@ -1,6 +1,7 @@
-import { api, ApiError, b64ToText } from "./api";
+import { api, ApiError, b64ToText, type FsrsParams } from "./api";
 import { deckFromPath, parseCardFile, serializeCardFile } from "./cardfile";
-import { db, getSettings } from "./db";
+import { db, getSettings, kvGet, kvSet } from "./db";
+import { configureScheduler } from "./scheduler";
 
 /**
  * Sync engine (SPEC §6). Order matters:
@@ -55,6 +56,10 @@ export function requestSync(delayMs = 1500): void {
 
 /** Wire up every opportunity to sync. Call once at app start. */
 export function startAutoSync(): void {
+  // Apply last-synced FSRS params immediately (works offline too).
+  void kvGet<FsrsParams>("fsrsParams").then((p) => {
+    if (p) configureScheduler(p.retention, p.weights);
+  });
   void syncAll();
   const soon = () => requestSync(300);
   window.addEventListener("focus", soon);
@@ -88,11 +93,16 @@ export async function syncAll(): Promise<SyncResult> {
 
     // Steady state is this single round trip: reviews up, manifest+state down.
     const pendingReviews = (await db.pendingReviews.toArray()).slice(0, 500);
-    const { files, state } = await api.sync(pendingReviews);
+    const { files, state, params, reviewCount } = await api.sync(pendingReviews);
     if (pendingReviews.length > 0) {
       await db.pendingReviews.bulkDelete(pendingReviews.map((r) => r.id));
       result.pushedReviews = pendingReviews.length;
     }
+
+    // Scheduling params are server-authoritative; adopt them everywhere.
+    await kvSet("fsrsParams", params);
+    await kvSet("reviewCount", reviewCount);
+    configureScheduler(params.retention, params.weights);
 
     // Only hits the network further if the manifest shows changes.
     await Promise.all([pullFiles(result, files), applyState(state)]);

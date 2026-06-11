@@ -8,7 +8,16 @@ import {
 } from "ts-fsrs";
 import { db, type StateRow } from "./db";
 
-const scheduler = fsrs();
+let scheduler = fsrs();
+
+/** Apply synced FSRS params (desired retention + optional optimized weights). */
+export function configureScheduler(retention: number, weights: number[] | null): void {
+  try {
+    scheduler = fsrs({ request_retention: retention, ...(weights ? { w: weights } : {}) });
+  } catch {
+    scheduler = fsrs({ request_retention: retention });
+  }
+}
 
 export { Rating, State };
 

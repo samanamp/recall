@@ -12,6 +12,7 @@
   "dependencies": {
     "dexie": "^4.4.3",
     "dexie-react-hooks": "^4.4.0",
+    "fsrs-browser": "^5.2.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.17.0",
     "react": "^19.2.6",

@@ -48,6 +48,31 @@ app.onError((err, c) => {
   return c.json({ error: "internal error" }, 500);
 });
 
+// ----------------------------------------------------- FSRS parameters
+
+interface FsrsParams {
+  retention: number;
+  weights: number[] | null;
+}
+
+async function getParams(db: D1Database): Promise<FsrsParams> {
+  const row = await db
+    .prepare("SELECT retention, weights FROM params WHERE k = 1")
+    .first<{ retention: number; weights: string | null }>();
+  return {
+    retention: row?.retention ?? 0.9,
+    weights: row?.weights ? (JSON.parse(row.weights) as number[]) : null,
+  };
+}
+
+function makeScheduler(p: FsrsParams): ReturnType<typeof fsrs> {
+  try {
+    return fsrs({ request_retention: p.retention, ...(p.weights ? { w: p.weights } : {}) });
+  } catch {
+    return fsrs({ request_retention: p.retention }); // bad weights — fall back
+  }
+}
+
 // ----------------------------------------------------- manifest cache
 //
 // GitHub's tree API costs 600-1200ms — far too slow to sit on the sync hot
@@ -197,6 +222,8 @@ app.post("/sync", async (c) => {
     reviews?: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[];
   }>();
 
+  const params = await getParams(c.env.DB);
+
   if (Array.isArray(reviews) && reviews.length > 0 && reviews.length <= 500) {
     const insert = c.env.DB.prepare(
       "INSERT OR IGNORE INTO reviews (id, card_id, rating, reviewed_at, device_id) VALUES (?, ?, ?, ?, ?)"
@@ -204,16 +231,24 @@ app.post("/sync", async (c) => {
     await c.env.DB.batch(
       reviews.map((r) => insert.bind(r.id, r.cardId, r.rating, r.reviewedAt, r.deviceId))
     );
+    const scheduler = makeScheduler(params);
     for (const cardId of new Set(reviews.map((r) => r.cardId))) {
-      await replayCard(c.env.DB, cardId);
+      await replayCard(c.env.DB, cardId, scheduler);
     }
   }
 
-  const [files, state] = await Promise.all([
+  const [files, state, countRow] = await Promise.all([
     getManifest(c.env, (p) => c.executionCtx.waitUntil(p)),
     c.env.DB.prepare("SELECT * FROM card_state").all().then((r) => r.results),
+    c.env.DB.prepare("SELECT COUNT(*) AS n FROM reviews").first<{ n: number }>(),
   ]);
-  return c.json({ files, state, accepted: reviews?.length ?? 0 });
+  return c.json({
+    files,
+    state,
+    params,
+    reviewCount: countRow?.n ?? 0,
+    accepted: reviews?.length ?? 0,
+  });
 });
 
 function isSafePath(path: string): boolean {
@@ -243,11 +278,54 @@ app.post("/reviews", async (c) => {
 
   // Recompute derived FSRS state for every touched card by replaying its full
   // log. Handles out-of-order arrival from devices that reviewed offline.
+  const scheduler = makeScheduler(await getParams(c.env.DB));
   const cardIds = [...new Set(reviews.map((r) => r.cardId))];
   for (const cardId of cardIds) {
-    await replayCard(c.env.DB, cardId);
+    await replayCard(c.env.DB, cardId, scheduler);
   }
   return c.json({ ok: true, accepted: reviews.length });
+});
+
+// Full review log — input for the client-side FSRS optimizer.
+app.get("/reviews/export", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    "SELECT card_id, rating, reviewed_at FROM reviews ORDER BY card_id, reviewed_at"
+  ).all<{ card_id: string; rating: number; reviewed_at: number }>();
+  return c.json({ reviews: results });
+});
+
+// Update scheduling parameters, then reschedule every card under them.
+app.put("/params", async (c) => {
+  const body = await c.req.json<{ retention?: number; weights?: number[] | null }>();
+  const current = await getParams(c.env.DB);
+  const next: FsrsParams = {
+    retention:
+      typeof body.retention === "number" && body.retention >= 0.7 && body.retention <= 0.99
+        ? body.retention
+        : current.retention,
+    weights:
+      body.weights === undefined
+        ? current.weights
+        : Array.isArray(body.weights) && body.weights.every((n) => Number.isFinite(n))
+          ? body.weights
+          : null,
+  };
+  await c.env.DB.prepare(
+    `INSERT INTO params (k, retention, weights, updated_at) VALUES (1, ?, ?, ?)
+     ON CONFLICT(k) DO UPDATE SET retention = excluded.retention,
+       weights = excluded.weights, updated_at = excluded.updated_at`
+  )
+    .bind(next.retention, next.weights ? JSON.stringify(next.weights) : null, Date.now())
+    .run();
+
+  const scheduler = makeScheduler(next);
+  const { results } = await c.env.DB.prepare("SELECT DISTINCT card_id FROM reviews").all<{
+    card_id: string;
+  }>();
+  for (const row of results) {
+    await replayCard(c.env.DB, row.card_id, scheduler);
+  }
+  return c.json({ ok: true, rescheduled: results.length });
 });
 
 app.get("/reviews", async (c) => {
@@ -265,7 +343,11 @@ app.get("/state", async (c) => {
   return c.json({ state: results });
 });
 
-async function replayCard(db: D1Database, cardId: string): Promise<void> {
+async function replayCard(
+  db: D1Database,
+  cardId: string,
+  scheduler: ReturnType<typeof fsrs>
+): Promise<void> {
   const { results } = await db
     .prepare(
       "SELECT rating, reviewed_at FROM reviews WHERE card_id = ? ORDER BY reviewed_at, id"
@@ -274,7 +356,6 @@ async function replayCard(db: D1Database, cardId: string): Promise<void> {
     .all<{ rating: number; reviewed_at: number }>();
   if (results.length === 0) return;
 
-  const scheduler = fsrs();
   let card = createEmptyCard(new Date(results[0].reviewed_at));
   for (const r of results) {
     card = scheduler.next(card, new Date(r.reviewed_at), r.rating as Grade).card;

@@ -7,6 +7,11 @@ export interface ManifestFile {
   sha: string;
 }
 
+export interface FsrsParams {
+  retention: number;
+  weights: number[] | null;
+}
+
 export interface ServerCardState {
   card_id: string;
   due: number;
@@ -57,14 +62,28 @@ async function request<T>(
 export const api = {
   manifest: () => request<{ files: ManifestFile[] }>("/cards/manifest"),
 
-  /** Combined steady-state sync: push reviews, pull manifest + FSRS state. */
+  /** Combined steady-state sync: push reviews, pull manifest + state + params. */
   sync: (
     reviews: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[]
   ) =>
-    request<{ files: ManifestFile[]; state: ServerCardState[]; accepted: number }>("/sync", {
-      method: "POST",
-      body: JSON.stringify({ reviews }),
+    request<{
+      files: ManifestFile[];
+      state: ServerCardState[];
+      params: FsrsParams;
+      reviewCount: number;
+      accepted: number;
+    }>("/sync", { method: "POST", body: JSON.stringify({ reviews }) }),
+
+  putParams: (body: { retention?: number; weights?: number[] | null }) =>
+    request<{ ok: true; rescheduled: number }>("/params", {
+      method: "PUT",
+      body: JSON.stringify(body),
     }),
+
+  exportReviews: () =>
+    request<{ reviews: { card_id: string; rating: number; reviewed_at: number }[] }>(
+      "/reviews/export"
+    ),
 
   getFile: (path: string) =>
     request<{ path: string; sha: string; contentBase64: string }>(
