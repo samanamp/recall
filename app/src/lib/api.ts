@@ -57,6 +57,15 @@ async function request<T>(
 export const api = {
   manifest: () => request<{ files: ManifestFile[] }>("/cards/manifest"),
 
+  /** Combined steady-state sync: push reviews, pull manifest + FSRS state. */
+  sync: (
+    reviews: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[]
+  ) =>
+    request<{ files: ManifestFile[]; state: ServerCardState[]; accepted: number }>("/sync", {
+      method: "POST",
+      body: JSON.stringify({ reviews }),
+    }),
+
   getFile: (path: string) =>
     request<{ path: string; sha: string; contentBase64: string }>(
       `/cards/file?path=${encodeURIComponent(path)}`

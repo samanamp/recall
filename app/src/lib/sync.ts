@@ -34,19 +34,22 @@ export async function syncAll(): Promise<SyncResult> {
   }
   syncing = true;
   try {
-    // Two independent pipelines: files (repo) and reviews/state (D1).
-    const capture = async (work: Promise<void>) => {
-      try {
-        await work;
-      } catch (e) {
-        result.ok = false;
-        result.errors.push(e instanceof Error ? e.message : String(e));
-      }
-    };
-    await Promise.all([
-      capture(pushFiles(result).then(() => pullFiles(result))),
-      capture(pushReviews(result).then(() => pullState())),
-    ]);
+    // Rare: queued card/media edits must land before we read the manifest.
+    if (await db.pendingFiles.count()) await pushFiles(result);
+
+    // Steady state is this single round trip: reviews up, manifest+state down.
+    const pendingReviews = (await db.pendingReviews.toArray()).slice(0, 500);
+    const { files, state } = await api.sync(pendingReviews);
+    if (pendingReviews.length > 0) {
+      await db.pendingReviews.bulkDelete(pendingReviews.map((r) => r.id));
+      result.pushedReviews = pendingReviews.length;
+    }
+
+    // Only hits the network further if the manifest shows changes.
+    await Promise.all([pullFiles(result, files), applyState(state)]);
+  } catch (e) {
+    result.ok = false;
+    result.errors.push(e instanceof Error ? e.message : String(e));
   } finally {
     syncing = false;
   }
@@ -95,8 +98,10 @@ async function putWithRetry(path: string, content: string, baseSha?: string): Pr
   }
 }
 
-async function pullFiles(result: SyncResult): Promise<void> {
-  const { files } = await api.manifest();
+async function pullFiles(
+  result: SyncResult,
+  files: { path: string; sha: string }[]
+): Promise<void> {
   const remote = new Map(files.map((f) => [f.path, f.sha]));
   const pendingPaths = new Set((await db.pendingFiles.toArray()).map((p) => p.path));
 
@@ -184,18 +189,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-async function pushReviews(result: SyncResult): Promise<void> {
-  const pending = await db.pendingReviews.toArray();
-  for (let i = 0; i < pending.length; i += 500) {
-    const batch = pending.slice(i, i + 500);
-    await api.postReviews(batch);
-    await db.pendingReviews.bulkDelete(batch.map((r) => r.id));
-    result.pushedReviews += batch.length;
-  }
-}
-
-async function pullState(): Promise<void> {
-  const { state } = await api.getState();
+async function applyState(state: import("./api").ServerCardState[]): Promise<void> {
   // Cards with unpushed reviews keep their local (newer) state.
   const dirty = new Set((await db.pendingReviews.toArray()).map((r) => r.cardId));
   for (const row of state) {

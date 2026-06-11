@@ -48,13 +48,65 @@ app.onError((err, c) => {
   return c.json({ error: "internal error" }, 500);
 });
 
+// ----------------------------------------------------- manifest cache
+//
+// GitHub's tree API costs 600-1200ms — far too slow to sit on the sync hot
+// path. The cache is served from D1 (~30ms), patched synchronously whenever
+// this worker writes a file, and revalidated against GitHub in the background
+// when older than the TTL (covers edits made directly on GitHub).
+
+const MANIFEST_TTL_MS = 60_000;
+
+interface ManifestFile {
+  path: string;
+  sha: string;
+}
+
+async function refreshManifest(env: Env): Promise<ManifestFile[]> {
+  const tree = await getTree(env);
+  const files = tree
+    .filter((e) => e.path.startsWith("decks/") || e.path.startsWith("media/"))
+    .map((e) => ({ path: e.path, sha: e.sha }));
+  await env.DB.prepare(
+    `INSERT INTO manifest_cache (k, json, fetched_at) VALUES (1, ?, ?)
+     ON CONFLICT(k) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at`
+  )
+    .bind(JSON.stringify(files), Date.now())
+    .run();
+  return files;
+}
+
+async function getManifest(
+  env: Env,
+  waitUntil: (p: Promise<unknown>) => void
+): Promise<ManifestFile[]> {
+  const row = await env.DB.prepare(
+    "SELECT json, fetched_at FROM manifest_cache WHERE k = 1"
+  ).first<{ json: string; fetched_at: number }>();
+  if (!row) return refreshManifest(env);
+  if (Date.now() - row.fetched_at > MANIFEST_TTL_MS) {
+    waitUntil(refreshManifest(env).catch(() => {}));
+  }
+  return JSON.parse(row.json) as ManifestFile[];
+}
+
+/** Keep the cache exact for writes made through this worker. */
+async function patchManifest(env: Env, path: string, sha: string | null): Promise<void> {
+  const row = await env.DB.prepare("SELECT json FROM manifest_cache WHERE k = 1").first<{
+    json: string;
+  }>();
+  if (!row) return;
+  const files = (JSON.parse(row.json) as ManifestFile[]).filter((f) => f.path !== path);
+  if (sha) files.push({ path, sha });
+  await env.DB.prepare("UPDATE manifest_cache SET json = ? WHERE k = 1")
+    .bind(JSON.stringify(files))
+    .run();
+}
+
 // ---------------------------------------------------------------- cards
 
 app.get("/cards/manifest", async (c) => {
-  const tree = await getTree(c.env);
-  const files = tree.filter(
-    (e) => e.path.startsWith("decks/") || e.path.startsWith("media/")
-  );
+  const files = await getManifest(c.env, (p) => c.executionCtx.waitUntil(p));
   return c.json({ files });
 });
 
@@ -113,6 +165,7 @@ app.put("/cards/file", async (c) => {
     message ?? `${sha ? "edit" : "add"} ${path}`,
     sha
   );
+  await patchManifest(c.env, path, result.sha);
   return c.json(result);
 });
 
@@ -124,6 +177,7 @@ app.delete("/cards/file", async (c) => {
   }>();
   if (!path || !isSafePath(path) || !sha) return c.json({ error: "bad request" }, 400);
   await deleteFile(c.env, path, sha, message ?? `delete ${path}`);
+  await patchManifest(c.env, path, null);
   return c.json({ ok: true });
 });
 
@@ -133,7 +187,33 @@ app.put("/media", async (c) => {
     return c.json({ error: "bad request" }, 400);
   }
   const result = await putFile(c.env, path, base64, `add ${path}`);
+  await patchManifest(c.env, path, result.sha);
   return c.json(result);
+});
+
+// One-round-trip sync: push reviews + pull manifest & FSRS state together.
+app.post("/sync", async (c) => {
+  const { reviews } = await c.req.json<{
+    reviews?: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[];
+  }>();
+
+  if (Array.isArray(reviews) && reviews.length > 0 && reviews.length <= 500) {
+    const insert = c.env.DB.prepare(
+      "INSERT OR IGNORE INTO reviews (id, card_id, rating, reviewed_at, device_id) VALUES (?, ?, ?, ?, ?)"
+    );
+    await c.env.DB.batch(
+      reviews.map((r) => insert.bind(r.id, r.cardId, r.rating, r.reviewedAt, r.deviceId))
+    );
+    for (const cardId of new Set(reviews.map((r) => r.cardId))) {
+      await replayCard(c.env.DB, cardId);
+    }
+  }
+
+  const [files, state] = await Promise.all([
+    getManifest(c.env, (p) => c.executionCtx.waitUntil(p)),
+    c.env.DB.prepare("SELECT * FROM card_state").all().then((r) => r.results),
+  ]);
+  return c.json({ files, state, accepted: reviews?.length ?? 0 });
 });
 
 function isSafePath(path: string): boolean {
