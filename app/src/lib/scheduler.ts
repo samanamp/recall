@@ -81,10 +81,21 @@ export interface DeckCounts {
   newCards: number;
 }
 
+/**
+ * Day-granularity due cutoff (Anki convention): a card due any time today
+ * counts as due now — nobody wants cards trickling in at 7:51pm.
+ */
+function dueCutoff(now: Date): number {
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  return end.getTime();
+}
+
 /** Due + new counts per deck (new = card without a state row). */
 export async function deckCounts(now: Date): Promise<Map<string, DeckCounts>> {
   const [cards, states] = await Promise.all([db.cards.toArray(), db.state.toArray()]);
   const stateById = new Map(states.map((s) => [s.cardId, s]));
+  const cutoff = dueCutoff(now);
   const counts = new Map<string, DeckCounts>();
   for (const deck of await db.decks.toArray()) {
     counts.set(deck.name, { due: 0, newCards: 0 });
@@ -93,7 +104,7 @@ export async function deckCounts(now: Date): Promise<Map<string, DeckCounts>> {
     const entry = counts.get(card.deck) ?? { due: 0, newCards: 0 };
     const s = stateById.get(card.id);
     if (!s) entry.newCards++;
-    else if (s.due <= now.getTime()) entry.due++;
+    else if (s.due <= cutoff) entry.due++;
     counts.set(card.deck, entry);
   }
   return counts;
@@ -101,6 +112,7 @@ export async function deckCounts(now: Date): Promise<Map<string, DeckCounts>> {
 
 /** Build the review queue for a deck: due cards (oldest first), then new. */
 export async function buildQueue(deck: string, now: Date): Promise<string[]> {
+  const cutoff = dueCutoff(now);
   const cards = await db.cards.where("deck").equals(deck).toArray();
   const states = await db.state.bulkGet(cards.map((c) => c.id));
   const due: { id: string; due: number }[] = [];
@@ -108,7 +120,7 @@ export async function buildQueue(deck: string, now: Date): Promise<string[]> {
   cards.forEach((card, i) => {
     const s = states[i];
     if (!s) fresh.push(card.id);
-    else if (s.due <= now.getTime()) due.push({ id: card.id, due: s.due });
+    else if (s.due <= cutoff) due.push({ id: card.id, due: s.due });
   });
   due.sort((a, b) => a.due - b.due);
   return [...due.map((d) => d.id), ...fresh];
