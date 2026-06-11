@@ -45,6 +45,11 @@ export interface PendingFile {
   queuedAt: number;
 }
 
+/** Deck registry — lets decks exist before they contain cards. */
+export interface DeckRow {
+  name: string;
+}
+
 export interface KVRow {
   key: string;
   value: unknown;
@@ -56,6 +61,7 @@ export const db = new Dexie("recall") as Dexie & {
   state: EntityTable<StateRow, "cardId">;
   pendingReviews: EntityTable<PendingReview, "id">;
   pendingFiles: EntityTable<PendingFile, "path">;
+  decks: EntityTable<DeckRow, "name">;
   kv: EntityTable<KVRow, "key">;
 };
 
@@ -66,6 +72,10 @@ db.version(1).stores({
   pendingReviews: "id, cardId",
   pendingFiles: "path",
   kv: "key",
+});
+
+db.version(2).stores({
+  decks: "name",
 });
 
 export async function kvGet<T>(key: string): Promise<T | undefined> {

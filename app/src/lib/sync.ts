@@ -94,6 +94,13 @@ async function pullFiles(result: SyncResult): Promise<void> {
   const remote = new Map(files.map((f) => [f.path, f.sha]));
   const pendingPaths = new Set((await db.pendingFiles.toArray()).map((p) => p.path));
 
+  // Register every deck folder seen in the repo (covers empty decks too).
+  for (const [path] of remote) {
+    if (!path.startsWith("decks/")) continue;
+    const deck = path.split("/").slice(1, -1).join("/");
+    if (deck) await db.decks.put({ name: deck });
+  }
+
   // --- cards ---
   const localCards = await db.cards.toArray();
   const localByPath = new Map(localCards.map((c) => [c.path, c]));

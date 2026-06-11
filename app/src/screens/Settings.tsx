@@ -12,7 +12,9 @@ export default function Settings() {
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    void kvGet<string>("workerUrl").then((v) => setWorkerUrl(v ?? ""));
+    void kvGet<string>("workerUrl").then((v) =>
+      setWorkerUrl(v || (import.meta.env.VITE_WORKER_URL as string) || "")
+    );
     void kvGet<string>("appToken").then((v) => setAppToken(v ?? ""));
   }, []);
 

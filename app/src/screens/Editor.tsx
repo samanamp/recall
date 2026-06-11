@@ -20,10 +20,11 @@ export default function Editor() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const decks = useLiveQuery(
-    async () => [...new Set((await db.cards.toArray()).map((c) => c.deck))].sort(),
+    async () => (await db.decks.toArray()).map((d) => d.name).sort(),
     [],
     [] as string[]
   );
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -39,18 +40,30 @@ export default function Editor() {
   const front = split[0]?.trim() ?? "";
   const back = split[1]?.trim() ?? "";
 
+  /** Store the image, insert its markdown reference at the cursor. */
+  async function insertImage(file: File | Blob) {
+    const path = await addMedia(file);
+    const at = textareaRef.current?.selectionStart ?? text.length;
+    const ref = `![](../../${path})`;
+    setText((t) => t.slice(0, at) + ref + t.slice(at));
+    void syncAll();
+  }
+
   async function onPaste(e: React.ClipboardEvent) {
     const file = [...e.clipboardData.items]
       .find((i) => i.type.startsWith("image/"))
       ?.getAsFile();
     if (!file) return; // plain text pastes untouched — that's the point
     e.preventDefault();
-    const path = await addMedia(file);
-    const ta = textareaRef.current!;
-    const at = ta.selectionStart;
-    const ref = `![](../../${path})`;
-    setText(text.slice(0, at) + ref + text.slice(at));
-    void syncAll();
+    await insertImage(file);
+  }
+
+  async function onDrop(e: React.DragEvent) {
+    const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    e.preventDefault();
+    setDragging(false);
+    for (const f of files) await insertImage(f);
   }
 
   async function onSave() {
@@ -114,13 +127,23 @@ export default function Editor() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onPaste={onPaste}
+          onDrop={onDrop}
+          onDragOver={(e) => {
+            if ([...e.dataTransfer.items].some((i) => i.kind === "file")) {
+              e.preventDefault();
+              setDragging(true);
+            }
+          }}
+          onDragLeave={() => setDragging(false)}
           placeholder={
-            "Front of the card (markdown, $math$, ```code```)…\n---\nBack of the card. Paste images directly."
+            "Front of the card (markdown, $math$, ```code```)…\n---\nBack of the card. Paste or drop images directly."
           }
           spellCheck={false}
-          className={`min-h-[50dvh] w-full resize-y rounded-xl border border-zinc-200 bg-white p-3 font-mono text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70 ${
-            mobileTab === "preview" ? "hidden sm:block" : ""
-          }`}
+          className={`min-h-[50dvh] w-full resize-y rounded-xl border bg-white p-3 font-mono text-sm shadow-sm outline-none focus:border-sky-500 dark:bg-zinc-900/70 ${
+            dragging
+              ? "border-sky-500 ring-2 ring-sky-500/30"
+              : "border-zinc-200 dark:border-zinc-800"
+          } ${mobileTab === "preview" ? "hidden sm:block" : ""}`}
         />
         <div
           className={`min-h-[50dvh] overflow-auto rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70 ${

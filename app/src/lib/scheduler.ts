@@ -77,6 +77,9 @@ export async function deckCounts(now: Date): Promise<Map<string, DeckCounts>> {
   const [cards, states] = await Promise.all([db.cards.toArray(), db.state.toArray()]);
   const stateById = new Map(states.map((s) => [s.cardId, s]));
   const counts = new Map<string, DeckCounts>();
+  for (const deck of await db.decks.toArray()) {
+    counts.set(deck.name, { due: 0, newCards: 0 });
+  }
   for (const card of cards) {
     const entry = counts.get(card.deck) ?? { due: 0, newCards: 0 };
     const s = stateById.get(card.id);

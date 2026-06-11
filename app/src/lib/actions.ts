@@ -36,6 +36,7 @@ export async function saveCard(input: {
   }
 
   await db.cards.put(card);
+  await db.decks.put({ name: input.deck });
   await db.pendingFiles.put({
     path: card.path,
     op: "put",
@@ -44,6 +45,19 @@ export async function saveCard(input: {
     queuedAt: Date.now(),
   });
   return card;
+}
+
+/** Register a deck and persist it to the repo (a .gitkeep keeps the folder). */
+export async function createDeck(name: string): Promise<void> {
+  const clean = name.trim().replace(/\.\./g, "").replace(/^\/+|\/+$/g, "");
+  if (!clean) return;
+  await db.decks.put({ name: clean });
+  await db.pendingFiles.put({
+    path: `decks/${clean}/.gitkeep`,
+    op: "put",
+    content: "",
+    queuedAt: Date.now(),
+  });
 }
 
 export async function deleteCard(id: string): Promise<void> {
