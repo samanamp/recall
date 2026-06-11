@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Markdown from "../components/Markdown";
 import { addMedia, saveCard } from "../lib/actions";
 import { db } from "../lib/db";
+import { toggleMarker } from "../lib/markdown-edit";
 
 /**
  * One markdown textarea per card: front, a `---` line, back.
@@ -39,39 +40,15 @@ export default function Editor() {
   const front = split[0]?.trim() ?? "";
   const back = split[1]?.trim() ?? "";
 
-  /** Wrap/unwrap the selection with a markdown marker (Ctrl/Cmd+B, +I). */
-  function toggleWrap(marker: string) {
+  /** Wrap/unwrap markdown emphasis (Ctrl/Cmd+B, +I) — logic in markdown-edit.ts. */
+  function toggleWrap(marker: "**" | "*") {
     const ta = textareaRef.current;
     if (!ta) return;
-    const { selectionStart: s, selectionEnd: e } = ta;
-    const sel = text.slice(s, e);
-    const before = text.slice(0, s);
-    const after = text.slice(e);
-    const m = marker.length;
-
-    let next: string;
-    let selS: number;
-    let selE: number;
-    if (sel.startsWith(marker) && sel.endsWith(marker) && sel.length >= 2 * m) {
-      // selection includes the markers — strip them
-      const inner = sel.slice(m, -m);
-      next = before + inner + after;
-      selS = s;
-      selE = s + inner.length;
-    } else if (before.endsWith(marker) && after.startsWith(marker)) {
-      // markers sit just outside the selection — strip them
-      next = before.slice(0, -m) + sel + after.slice(m);
-      selS = s - m;
-      selE = e - m;
-    } else {
-      next = before + marker + sel + marker + after;
-      selS = s + m;
-      selE = e + m;
-    }
-    setText(next);
+    const r = toggleMarker(text, ta.selectionStart, ta.selectionEnd, marker);
+    setText(r.text);
     requestAnimationFrame(() => {
       ta.focus();
-      ta.setSelectionRange(selS, selE);
+      ta.setSelectionRange(r.selStart, r.selEnd);
     });
   }
 
