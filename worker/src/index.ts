@@ -198,11 +198,32 @@ app.put("/cards/file", async (c) => {
 app.delete("/cards/file", async (c) => {
   const { path, sha, message } = await c.req.json<{
     path: string;
-    sha: string;
+    sha?: string;
     message?: string;
   }>();
-  if (!path || !isSafePath(path) || !sha) return c.json({ error: "bad request" }, 400);
-  await deleteFile(c.env, path, sha, message ?? `delete ${path}`);
+  if (!path || !isSafePath(path)) return c.json({ error: "bad request" }, 400);
+
+  // Resolve the sha server-side when missing or stale; "already gone" = success.
+  const resolveSha = async (): Promise<string | null> => {
+    try {
+      return (await getFile(c.env, path)).sha;
+    } catch (e) {
+      if (e instanceof GitHubError && e.status === 404) return null;
+      throw e;
+    }
+  };
+
+  let target = sha || (await resolveSha());
+  if (target !== null) {
+    try {
+      await deleteFile(c.env, path, target, message ?? `delete ${path}`);
+    } catch (e) {
+      const conflict = e instanceof GitHubError && (e.status === 409 || e.status === 422);
+      if (!conflict) throw e;
+      target = await resolveSha(); // stale sha — retry once with the current one
+      if (target !== null) await deleteFile(c.env, path, target, message ?? `delete ${path}`);
+    }
+  }
   await patchManifest(c.env, path, null);
   return c.json({ ok: true });
 });

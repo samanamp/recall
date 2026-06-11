@@ -112,7 +112,7 @@ export const api = {
   putFile: (body: { path: string; content: string; sha?: string; message?: string }) =>
     request<{ sha: string }>("/cards/file", { method: "PUT", body: JSON.stringify(body) }),
 
-  deleteFile: (body: { path: string; sha: string; message?: string }) =>
+  deleteFile: (body: { path: string; sha?: string; message?: string }) =>
     request<{ ok: true }>("/cards/file", { method: "DELETE", body: JSON.stringify(body) }),
 
   putMedia: (path: string, base64: string) =>

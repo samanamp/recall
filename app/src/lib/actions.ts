@@ -64,6 +64,25 @@ export async function createDeck(name: string): Promise<void> {
   requestSync(500);
 }
 
+/** Delete a deck and every card in it (repo files included — git history keeps them). */
+export async function deleteDeck(name: string): Promise<void> {
+  const cards = await db.cards.where("deck").equals(name).toArray();
+  for (const card of cards) {
+    await db.cards.delete(card.id);
+    await db.state.delete(card.id);
+    await queueDelete(card.path, card.sha);
+  }
+  await db.decks.delete(name);
+  // The folder keeper may or may not exist (UI-created vs imported decks);
+  // the worker resolves the sha itself and treats "already gone" as success.
+  await db.pendingFiles.put({
+    path: `decks/${name}/.gitkeep`,
+    op: "delete",
+    queuedAt: Date.now(),
+  });
+  requestSync(300);
+}
+
 export async function deleteCard(id: string): Promise<void> {
   const card = await db.cards.get(id);
   if (!card) return;

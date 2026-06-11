@@ -127,16 +127,8 @@ async function pushFiles(result: SyncResult): Promise<void> {
         const sha = await putWithRetry(item.path, item.content ?? "", item.baseSha);
         await db.cards.where("path").equals(item.path).modify({ sha });
       } else {
-        try {
-          await api.deleteFile({ path: item.path, sha: item.baseSha ?? "" });
-        } catch (e) {
-          if (!(e instanceof ApiError && (e.status === 404 || e.status === 409))) throw e;
-          if (e.status === 409) {
-            const current = await api.getFile(item.path);
-            await api.deleteFile({ path: item.path, sha: current.sha });
-          }
-          // 404: already gone — fine.
-        }
+        // Worker resolves missing/stale shas and treats already-deleted as ok.
+        await api.deleteFile({ path: item.path, sha: item.baseSha });
       }
       await db.pendingFiles.delete(item.path);
       result.pushedFiles++;
@@ -165,11 +157,20 @@ async function pullFiles(
   const remote = new Map(files.map((f) => [f.path, f.sha]));
   const pendingPaths = new Set((await db.pendingFiles.toArray()).map((p) => p.path));
 
-  // Register every deck folder seen in the repo (covers empty decks too).
+  // Register every deck folder seen in the repo (covers empty decks too)…
+  const remoteDecks = new Set<string>();
   for (const [path] of remote) {
     if (!path.startsWith("decks/")) continue;
     const deck = path.split("/").slice(1, -1).join("/");
-    if (deck) await db.decks.put({ name: deck });
+    if (deck) {
+      remoteDecks.add(deck);
+      await db.decks.put({ name: deck });
+    }
+  }
+  // …and prune decks deleted elsewhere (unless something local is still queued).
+  for (const d of await db.decks.toArray()) {
+    const hasPending = [...pendingPaths].some((p) => p.startsWith(`decks/${d.name}/`));
+    if (!remoteDecks.has(d.name) && !hasPending) await db.decks.delete(d.name);
   }
 
   // --- cards: collect everything that changed, then fetch in batches ---

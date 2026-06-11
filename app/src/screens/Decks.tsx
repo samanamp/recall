@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { createDeck } from "../lib/actions";
+import { createDeck, deleteDeck } from "../lib/actions";
 import { db } from "../lib/db";
 import { deckCounts } from "../lib/scheduler";
 
@@ -14,6 +14,16 @@ export default function Decks() {
     await createDeck(name);
     setName("");
     setAdding(false);
+  }
+
+  async function onDelete(e: React.MouseEvent, deck: string, total: number) {
+    e.preventDefault(); // tile is a Link — don't navigate
+    e.stopPropagation();
+    const what = total > 0 ? `"${deck}" and its ${total} card${total === 1 ? "" : "s"}` : `"${deck}"`;
+    if (!confirm(`Delete ${what}?\n\nFiles are removed from your repo (git history keeps them recoverable).`)) {
+      return;
+    }
+    await deleteDeck(deck);
   }
 
   const decks = useLiveQuery(async () => {
@@ -108,8 +118,19 @@ export default function Decks() {
           >
             <div className="flex items-center justify-between">
               <span className="font-semibold">{deck.name}</span>
-              <span className="text-zinc-300 transition-transform group-hover:translate-x-0.5 group-hover:text-sky-500 dark:text-zinc-600">
-                →
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={(e) => void onDelete(e, deck.name, deck.total)}
+                  title="Delete deck"
+                  className="rounded-md p-1 text-zinc-300 opacity-60 transition-colors hover:bg-red-50 hover:text-red-500 hover:opacity-100 dark:text-zinc-600 dark:hover:bg-red-950/50"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                    <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                  </svg>
+                </button>
+                <span className="text-zinc-300 transition-transform group-hover:translate-x-0.5 group-hover:text-sky-500 dark:text-zinc-600">
+                  →
+                </span>
               </span>
             </div>
             <div className="flex items-center gap-1.5 text-xs">
