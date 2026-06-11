@@ -62,17 +62,24 @@ async function request<T>(
 export const api = {
   manifest: () => request<{ files: ManifestFile[] }>("/cards/manifest"),
 
-  /** Combined steady-state sync: push reviews, pull manifest + state + params. */
+  /**
+   * Combined steady-state sync: push reviews, pull manifest + state + params.
+   * Echo the last cursor back; if nothing changed server-side the response is
+   * `{unchanged: true}` (~60 bytes) and files/state/params are omitted.
+   */
   sync: (
-    reviews: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[]
+    reviews: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[],
+    cursor?: string
   ) =>
     request<{
-      files: ManifestFile[];
-      state: ServerCardState[];
-      params: FsrsParams;
+      unchanged?: true;
+      cursor: string;
+      files?: ManifestFile[];
+      state?: ServerCardState[];
+      params?: FsrsParams;
       reviewCount: number;
       accepted: number;
-    }>("/sync", { method: "POST", body: JSON.stringify({ reviews }) }),
+    }>("/sync", { method: "POST", body: JSON.stringify({ reviews, cursor }) }),
 
   putParams: (body: { retention?: number; weights?: number[] | null }) =>
     request<{ ok: true; rescheduled: number }>("/params", {

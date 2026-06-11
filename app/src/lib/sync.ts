@@ -92,20 +92,24 @@ export async function syncAll(): Promise<SyncResult> {
     if (await db.pendingFiles.count()) await pushFiles(result);
 
     // Steady state is this single round trip: reviews up, manifest+state down.
+    // The cursor makes the no-change case (heartbeats) a ~60-byte response.
     const pendingReviews = (await db.pendingReviews.toArray()).slice(0, 500);
-    const { files, state, params, reviewCount } = await api.sync(pendingReviews);
+    const lastCursor = await kvGet<string>("syncCursor");
+    const resp = await api.sync(pendingReviews, lastCursor);
     if (pendingReviews.length > 0) {
       await db.pendingReviews.bulkDelete(pendingReviews.map((r) => r.id));
       result.pushedReviews = pendingReviews.length;
     }
+    await kvSet("reviewCount", resp.reviewCount);
+    await kvSet("syncCursor", resp.cursor);
 
-    // Scheduling params are server-authoritative; adopt them everywhere.
-    await kvSet("fsrsParams", params);
-    await kvSet("reviewCount", reviewCount);
-    configureScheduler(params.retention, params.weights);
-
-    // Only hits the network further if the manifest shows changes.
-    await Promise.all([pullFiles(result, files), applyState(state)]);
+    if (!resp.unchanged) {
+      // Scheduling params are server-authoritative; adopt them everywhere.
+      await kvSet("fsrsParams", resp.params);
+      configureScheduler(resp.params!.retention, resp.params!.weights);
+      // Only hits the network further if the manifest shows changes.
+      await Promise.all([pullFiles(result, resp.files!), applyState(resp.state!)]);
+    }
   } catch (e) {
     result.ok = false;
     result.errors.push(e instanceof Error ? e.message : String(e));

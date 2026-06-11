@@ -101,19 +101,34 @@ async function refreshManifest(env: Env, expectedVersion: number | null): Promis
   const files = tree
     .filter((e) => e.path.startsWith("decks/") || e.path.startsWith("media/"))
     .map((e) => ({ path: e.path, sha: e.sha }));
+  const json = JSON.stringify(files);
   if (expectedVersion === null) {
     await env.DB.prepare(
       `INSERT INTO manifest_cache (k, json, fetched_at, version) VALUES (1, ?, ?, 1)
        ON CONFLICT(k) DO NOTHING`
     )
-      .bind(JSON.stringify(files), Date.now())
+      .bind(json, Date.now())
+      .run();
+    return files;
+  }
+  const current = await env.DB.prepare(
+    "SELECT json FROM manifest_cache WHERE k = 1 AND version = ?"
+  )
+    .bind(expectedVersion)
+    .first<{ json: string }>();
+  if (!current) return files; // a patch landed meanwhile — drop this refresh (CAS)
+  if (current.json === json) {
+    // Content identical: refresh the TTL but DON'T bump version, so sync
+    // cursors stay valid and idle clients keep getting tiny responses.
+    await env.DB.prepare("UPDATE manifest_cache SET fetched_at = ? WHERE k = 1 AND version = ?")
+      .bind(Date.now(), expectedVersion)
       .run();
   } else {
     await env.DB.prepare(
       `UPDATE manifest_cache SET json = ?, fetched_at = ?, version = version + 1
        WHERE k = 1 AND version = ?`
     )
-      .bind(JSON.stringify(files), Date.now(), expectedVersion)
+      .bind(json, Date.now(), expectedVersion)
       .run();
   }
   return files;
@@ -260,14 +275,19 @@ app.put("/media", async (c) => {
 });
 
 // One-round-trip sync: push reviews + pull manifest & FSRS state together.
+// Clients echo back the `cursor` we return; when it still matches (the
+// overwhelmingly common heartbeat case) the response is ~60 bytes instead
+// of the full manifest + state payload.
 app.post("/sync", async (c) => {
-  const { reviews } = await c.req.json<{
+  const { reviews, cursor } = await c.req.json<{
     reviews?: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[];
+    cursor?: string;
   }>();
 
   const params = await getParams(c.env.DB);
+  const pushed = Array.isArray(reviews) && reviews.length > 0 && reviews.length <= 500;
 
-  if (Array.isArray(reviews) && reviews.length > 0 && reviews.length <= 500) {
+  if (pushed) {
     const insert = c.env.DB.prepare(
       "INSERT OR IGNORE INTO reviews (id, card_id, rating, reviewed_at, device_id) VALUES (?, ?, ?, ?, ?)"
     );
@@ -280,17 +300,51 @@ app.post("/sync", async (c) => {
     }
   }
 
-  const [files, state, countRow] = await Promise.all([
-    getManifest(c.env, (p) => c.executionCtx.waitUntil(p)),
-    c.env.DB.prepare("SELECT * FROM card_state").all().then((r) => r.results),
-    c.env.DB.prepare("SELECT COUNT(*) AS n FROM reviews").first<{ n: number }>(),
+  const [manifest, paramsRow, reviewStat] = await Promise.all([
+    c.env.DB.prepare("SELECT json, fetched_at, version FROM manifest_cache WHERE k = 1")
+      .first<{ json: string; fetched_at: number; version: number }>(),
+    c.env.DB.prepare("SELECT updated_at FROM params WHERE k = 1").first<{ updated_at: number }>(),
+    c.env.DB.prepare(
+      "SELECT COUNT(*) AS n, COALESCE(MAX(rowid), 0) AS mx FROM reviews"
+    ).first<{ n: number; mx: number }>(),
   ]);
+
+  // Keep hand-edits-on-GitHub flowing for idle clients: revalidate in the
+  // background when stale. A real change bumps version → next cursor differs.
+  let files: ManifestFile[];
+  if (!manifest) {
+    files = await refreshManifest(c.env, null);
+  } else {
+    if (Date.now() - manifest.fetched_at > MANIFEST_TTL_MS) {
+      c.executionCtx.waitUntil(refreshManifest(c.env, manifest.version).catch(() => {}));
+    }
+    files = JSON.parse(manifest.json) as ManifestFile[];
+  }
+
+  const current = [
+    manifest?.version ?? 1,
+    paramsRow?.updated_at ?? 0,
+    reviewStat?.mx ?? 0,
+    reviewStat?.n ?? 0,
+  ].join(":");
+
+  if (!pushed && cursor && cursor === current) {
+    return c.json({
+      unchanged: true,
+      cursor: current,
+      reviewCount: reviewStat?.n ?? 0,
+      accepted: 0,
+    });
+  }
+
+  const state = (await c.env.DB.prepare("SELECT * FROM card_state").all()).results;
   return c.json({
     files,
     state,
     params,
-    reviewCount: countRow?.n ?? 0,
-    accepted: reviews?.length ?? 0,
+    cursor: current,
+    reviewCount: reviewStat?.n ?? 0,
+    accepted: pushed ? reviews.length : 0,
   });
 });
 
