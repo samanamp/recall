@@ -11,6 +11,13 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Replace the browser's default white focus box with a brand ring. */
+:focus-visible {
+  outline: 2px solid rgb(14 165 233 / 0.7);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 /* Inline code: subtle pill, and kill the typography plugin's backticks. */
 .prose :where(code)::before,
 .prose :where(code)::after {

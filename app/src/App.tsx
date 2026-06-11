@@ -39,9 +39,9 @@ export default function App() {
   }, []);
 
   const tab = ({ isActive }: { isActive: boolean }) =>
-    `flex-1 py-3 text-center text-sm font-medium transition-colors sm:flex-none sm:px-4 sm:py-2 sm:rounded-lg ${
+    `flex-1 py-3 text-center text-sm font-medium transition-colors sm:flex-none sm:rounded-full sm:px-3.5 sm:py-1.5 ${
       isActive
-        ? "text-sky-600 dark:text-sky-400 sm:bg-sky-100 sm:dark:bg-sky-950"
+        ? "text-sky-600 dark:text-sky-400 sm:bg-sky-500/10"
         : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
     }`;
 

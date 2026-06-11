@@ -50,38 +50,49 @@ export default function Settings() {
   }
 
   const input =
-    "w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-sky-500 dark:border-zinc-700";
+    "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70";
+  const label = "mb-1 block text-xs font-medium text-zinc-500";
+  const secondary =
+    "rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:border-sky-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-sky-600";
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-md space-y-10">
+      <h1 className="text-xl font-bold tracking-tight">Settings</h1>
+
       <section>
-        <h2 className="mb-2 font-semibold">Sync</h2>
-        <p className="mb-3 text-sm text-zinc-500">
-          Your deployed Cloudflare Worker URL and the app token you chose for it.
+        <h2 className="mb-1 font-semibold">Sync</h2>
+        <p className="mb-4 text-sm text-zinc-500">
+          Your worker URL and the app token you chose for it.
         </p>
-        <div className="space-y-2">
-          <input
-            value={workerUrl}
-            onChange={(e) => setWorkerUrl(e.target.value)}
-            placeholder="https://recall-api.yourname.workers.dev"
-            className={input}
-          />
-          <input
-            value={appToken}
-            onChange={(e) => setAppToken(e.target.value)}
-            placeholder="app token"
-            type="password"
-            className={input}
-          />
+        <div className="space-y-3">
+          <div>
+            <label className={label}>Worker URL</label>
+            <input
+              value={workerUrl}
+              onChange={(e) => setWorkerUrl(e.target.value)}
+              placeholder="https://recall-api.yourname.workers.dev"
+              className={input}
+            />
+          </div>
+          <div>
+            <label className={label}>App token</label>
+            <input
+              value={appToken}
+              onChange={(e) => setAppToken(e.target.value)}
+              placeholder="app token"
+              type="password"
+              className={input}
+            />
+          </div>
           <button
             onClick={() => void onSync()}
             disabled={syncing || !workerUrl.trim() || !appToken.trim()}
-            className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-40"
+            className="w-full rounded-xl bg-sky-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 disabled:opacity-40"
           >
             {syncing ? "Syncing…" : "Sync now"}
           </button>
           {syncResult && (
-            <p className={`text-sm ${syncResult.ok ? "text-emerald-600" : "text-red-500"}`}>
+            <p className={`text-sm ${syncResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
               {syncResult.ok
                 ? `✓ pushed ${syncResult.pushedFiles} files, ${syncResult.pushedReviews} reviews · pulled ${syncResult.pulledFiles} files`
                 : `✗ ${syncResult.errors.join("; ") || "not configured or offline"}`}
@@ -91,8 +102,8 @@ export default function Settings() {
       </section>
 
       <section>
-        <h2 className="mb-2 font-semibold">Appearance</h2>
-        <div className="flex gap-2">
+        <h2 className="mb-3 font-semibold">Appearance</h2>
+        <div className="inline-flex rounded-xl bg-zinc-200/70 p-1 dark:bg-zinc-800/80">
           {(["system", "dark", "light"] as const).map((t) => (
             <button
               key={t}
@@ -100,10 +111,10 @@ export default function Settings() {
                 setTheme(t);
                 setThemeState(t);
               }}
-              className={`rounded-lg px-4 py-1.5 text-sm capitalize ${
+              className={`rounded-lg px-4 py-1.5 text-sm capitalize transition-colors ${
                 theme === t
-                  ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                  : "border border-zinc-300 dark:border-zinc-700"
+                  ? "bg-white font-medium text-zinc-900 shadow-sm dark:bg-zinc-600 dark:text-zinc-50"
+                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
               }`}
             >
               {t}
@@ -113,15 +124,12 @@ export default function Settings() {
       </section>
 
       <section>
-        <h2 className="mb-2 font-semibold">Backup</h2>
+        <h2 className="mb-3 font-semibold">Backup</h2>
         <div className="flex gap-2">
-          <button
-            onClick={() => void onExport()}
-            className="rounded-lg border border-zinc-300 px-4 py-1.5 text-sm hover:border-sky-500 dark:border-zinc-700"
-          >
+          <button onClick={() => void onExport()} className={secondary}>
             Export JSON
           </button>
-          <label className="cursor-pointer rounded-lg border border-zinc-300 px-4 py-1.5 text-sm hover:border-sky-500 dark:border-zinc-700">
+          <label className={`cursor-pointer ${secondary}`}>
             Import JSON
             <input
               type="file"

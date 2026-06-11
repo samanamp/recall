@@ -84,13 +84,14 @@ export default function Editor() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <h1 className="text-xl font-bold tracking-tight">{id ? "Edit card" : "New card"}</h1>
         <input
           list="deck-list"
           value={deck}
           onChange={(e) => setDeck(e.target.value)}
-          placeholder="Deck name"
-          className="w-48 rounded-lg border border-zinc-300 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-sky-500 dark:border-zinc-700"
+          placeholder="Deck"
+          className="ml-auto w-40 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70"
         />
         <datalist id="deck-list">
           {decks.map((d) => <option key={d} value={d} />)}
@@ -98,7 +99,7 @@ export default function Editor() {
         <button
           onClick={() => void onSave()}
           disabled={!valid || saving}
-          className="ml-auto rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-40"
+          className="rounded-xl bg-sky-600 px-5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 disabled:opacity-40"
         >
           {id ? "Save" : "Add card"}
         </button>
@@ -119,6 +120,11 @@ export default function Editor() {
             {t}
           </button>
         ))}
+      </div>
+
+      <div className="hidden grid-cols-2 gap-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 sm:grid">
+        <span>Write — front, ---, back</span>
+        <span>Preview</span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
