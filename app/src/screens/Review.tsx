@@ -4,7 +4,6 @@ import Markdown from "../components/Markdown";
 import { recordReview } from "../lib/actions";
 import { db, type CardRow } from "../lib/db";
 import { buildQueue, previewIntervals } from "../lib/scheduler";
-import { syncAll } from "../lib/sync";
 
 const RATINGS = [
   {
@@ -57,7 +56,6 @@ export default function Review() {
     } else {
       setQueue([]);
       setCard(null);
-      void syncAll();
     }
   }, [deck]);
 

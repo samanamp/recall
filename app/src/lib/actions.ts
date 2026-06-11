@@ -3,6 +3,7 @@ import { blobToBase64 } from "./api";
 import { cardPath, serializeCardFile } from "./cardfile";
 import { db, getDeviceId, type CardRow } from "./db";
 import { contentHash, optimizeImage } from "./image";
+import { requestSync } from "./sync";
 import { rateCard } from "./scheduler";
 
 /**
@@ -45,6 +46,7 @@ export async function saveCard(input: {
     baseSha: card.sha ?? undefined,
     queuedAt: Date.now(),
   });
+  requestSync(500);
   return card;
 }
 
@@ -59,6 +61,7 @@ export async function createDeck(name: string): Promise<void> {
     content: "",
     queuedAt: Date.now(),
   });
+  requestSync(500);
 }
 
 export async function deleteCard(id: string): Promise<void> {
@@ -67,6 +70,7 @@ export async function deleteCard(id: string): Promise<void> {
   await db.cards.delete(id);
   await db.state.delete(id);
   await queueDelete(card.path, card.sha);
+  requestSync(500);
 }
 
 async function queueDelete(path: string, sha: string | null): Promise<void> {
@@ -93,6 +97,7 @@ export async function recordReview(
     reviewedAt: now.getTime(),
     deviceId: await getDeviceId(),
   });
+  requestSync(2000); // coalesces across a burst of ratings
 }
 
 /**
@@ -110,5 +115,6 @@ export async function addMedia(input: Blob): Promise<string> {
     contentBase64: await blobToBase64(blob),
     queuedAt: Date.now(),
   });
+  requestSync(1000);
   return path;
 }

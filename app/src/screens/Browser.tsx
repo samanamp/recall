@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { deleteCard } from "../lib/actions";
 import { db } from "../lib/db";
-import { syncAll } from "../lib/sync";
 
 export default function Browser() {
   const [query, setQuery] = useState("");
@@ -25,7 +24,6 @@ export default function Browser() {
   async function onDelete(id: string) {
     if (!confirm("Delete this card? The file is removed from your repo too.")) return;
     await deleteCard(id);
-    void syncAll();
   }
 
   return (

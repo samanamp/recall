@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "./lib/db";
-import { syncAll, type SyncResult } from "./lib/sync";
+import { subscribeSync, syncAll, type SyncStatus } from "./lib/sync";
 import Decks from "./screens/Decks";
 import Review from "./screens/Review";
 import Editor from "./screens/Editor";
@@ -10,8 +10,8 @@ import Browser from "./screens/Browser";
 import Settings from "./screens/Settings";
 
 export default function App() {
-  const [syncing, setSyncing] = useState(false);
-  const [lastSync, setLastSync] = useState<SyncResult | null>(null);
+  const [sync, setSync] = useState<SyncStatus>({ syncing: false, last: null });
+  useEffect(() => subscribeSync(setSync), []);
 
   const pendingCount = useLiveQuery(
     async () => (await db.pendingFiles.count()) + (await db.pendingReviews.count()),
@@ -19,24 +19,7 @@ export default function App() {
     0
   );
 
-  async function runSync() {
-    setSyncing(true);
-    const result = await syncAll();
-    // ok:false with no errors = skipped (already syncing / offline) — not a failure.
-    if (result.ok || result.errors.length > 0) setLastSync(result);
-    setSyncing(false);
-  }
-
-  useEffect(() => {
-    void runSync(); // on launch
-    const onFocus = () => void runSync();
-    window.addEventListener("focus", onFocus);
-    window.addEventListener("online", onFocus);
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("online", onFocus);
-    };
-  }, []);
+  const failed = sync.last !== null && !sync.last.ok && sync.last.errors.length > 0;
 
   const tab = ({ isActive }: { isActive: boolean }) =>
     `flex-1 py-3 text-center text-sm font-medium transition-colors sm:flex-none sm:rounded-full sm:px-3.5 sm:py-1.5 ${
@@ -60,14 +43,32 @@ export default function App() {
             <NavLink to="/settings" className={tab}>Settings</NavLink>
           </nav>
           <button
-            onClick={() => void runSync()}
-            disabled={syncing}
-            title={lastSync?.errors.join("\n") || "Sync"}
-            className="ml-auto rounded-lg px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 disabled:animate-pulse dark:text-zinc-400 dark:hover:bg-zinc-800"
+            onClick={() => void syncAll()}
+            disabled={sync.syncing}
+            title={failed ? sync.last?.errors.join("\n") : "Sync now"}
+            className={`ml-auto flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium shadow-sm transition-colors ${
+              failed
+                ? "border-red-300 bg-red-50 text-red-600 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400"
+                : "border-zinc-200 bg-white text-zinc-600 hover:border-sky-400 hover:text-sky-600 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:border-sky-600 dark:hover:text-sky-400"
+            }`}
           >
-            {syncing ? "⟳ syncing…" : lastSync && !lastSync.ok ? "⟳ ⚠️" : "⟳"}
-            {pendingCount > 0 && (
-              <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-xs text-white">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`h-4 w-4 ${sync.syncing ? "animate-spin" : ""}`}
+            >
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            <span className="hidden sm:inline">
+              {sync.syncing ? "Syncing…" : failed ? "Sync failed" : "Synced"}
+            </span>
+            {pendingCount > 0 && !sync.syncing && (
+              <span className="rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white">
                 {pendingCount}
               </span>
             )}

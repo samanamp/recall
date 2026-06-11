@@ -20,6 +20,54 @@ export interface SyncResult {
 
 let syncing = false;
 
+// ---- status store: lets the UI observe syncs no matter who triggered them ----
+
+export interface SyncStatus {
+  syncing: boolean;
+  last: SyncResult | null;
+}
+
+let status: SyncStatus = { syncing: false, last: null };
+const listeners = new Set<(s: SyncStatus) => void>();
+
+function setStatus(patch: Partial<SyncStatus>): void {
+  status = { ...status, ...patch };
+  for (const fn of listeners) fn(status);
+}
+
+export function subscribeSync(fn: (s: SyncStatus) => void): () => void {
+  listeners.add(fn);
+  fn(status);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+// ---- opportunistic scheduling ----
+
+let timer: ReturnType<typeof setTimeout> | undefined;
+
+/** Debounced sync: actions call this freely; bursts coalesce into one call. */
+export function requestSync(delayMs = 1500): void {
+  clearTimeout(timer);
+  timer = setTimeout(() => void syncAll(), delayMs);
+}
+
+/** Wire up every opportunity to sync. Call once at app start. */
+export function startAutoSync(): void {
+  void syncAll();
+  const soon = () => requestSync(300);
+  window.addEventListener("focus", soon);
+  window.addEventListener("online", soon);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") soon();
+  });
+  // Heartbeat while the tab is open — steady-state sync is a single ~100ms call.
+  setInterval(() => {
+    if (document.visibilityState === "visible") requestSync(0);
+  }, 60_000);
+}
+
 export async function syncAll(): Promise<SyncResult> {
   const result: SyncResult = {
     ok: true,
@@ -33,6 +81,7 @@ export async function syncAll(): Promise<SyncResult> {
     return result;
   }
   syncing = true;
+  setStatus({ syncing: true });
   try {
     // Rare: queued card/media edits must land before we read the manifest.
     if (await db.pendingFiles.count()) await pushFiles(result);
@@ -52,6 +101,7 @@ export async function syncAll(): Promise<SyncResult> {
     result.errors.push(e instanceof Error ? e.message : String(e));
   } finally {
     syncing = false;
+    setStatus({ syncing: false, last: result });
   }
   return result;
 }

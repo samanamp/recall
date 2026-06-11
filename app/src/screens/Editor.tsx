@@ -4,7 +4,6 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Markdown from "../components/Markdown";
 import { addMedia, saveCard } from "../lib/actions";
 import { db } from "../lib/db";
-import { syncAll } from "../lib/sync";
 
 /**
  * One markdown textarea per card: front, a `---` line, back.
@@ -46,7 +45,6 @@ export default function Editor() {
     const at = textareaRef.current?.selectionStart ?? text.length;
     const ref = `![](../../${path})`;
     setText((t) => t.slice(0, at) + ref + t.slice(at));
-    void syncAll();
   }
 
   async function onPaste(e: React.ClipboardEvent) {
@@ -70,7 +68,6 @@ export default function Editor() {
     if (!deck.trim() || !front) return;
     setSaving(true);
     await saveCard({ id, deck: deck.trim(), front, back });
-    void syncAll();
     if (id) {
       navigate(-1);
     } else {

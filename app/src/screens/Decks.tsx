@@ -4,7 +4,6 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { createDeck } from "../lib/actions";
 import { db } from "../lib/db";
 import { deckCounts } from "../lib/scheduler";
-import { syncAll } from "../lib/sync";
 
 export default function Decks() {
   const [adding, setAdding] = useState(false);
@@ -15,7 +14,6 @@ export default function Decks() {
     await createDeck(name);
     setName("");
     setAdding(false);
-    void syncAll();
   }
 
   const decks = useLiveQuery(async () => {
