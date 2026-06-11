@@ -88,17 +88,31 @@ interface ManifestFile {
   sha: string;
 }
 
-async function refreshManifest(env: Env): Promise<ManifestFile[]> {
+/**
+ * Refresh from GitHub. The tree fetch takes ~1s, during which a write may
+ * patch the cache — so the write-back is CAS-guarded by `version`: if a patch
+ * landed meanwhile, this refresh is discarded (next TTL expiry catches up).
+ */
+async function refreshManifest(env: Env, expectedVersion: number | null): Promise<ManifestFile[]> {
   const tree = await getTree(env);
   const files = tree
     .filter((e) => e.path.startsWith("decks/") || e.path.startsWith("media/"))
     .map((e) => ({ path: e.path, sha: e.sha }));
-  await env.DB.prepare(
-    `INSERT INTO manifest_cache (k, json, fetched_at) VALUES (1, ?, ?)
-     ON CONFLICT(k) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at`
-  )
-    .bind(JSON.stringify(files), Date.now())
-    .run();
+  if (expectedVersion === null) {
+    await env.DB.prepare(
+      `INSERT INTO manifest_cache (k, json, fetched_at, version) VALUES (1, ?, ?, 1)
+       ON CONFLICT(k) DO NOTHING`
+    )
+      .bind(JSON.stringify(files), Date.now())
+      .run();
+  } else {
+    await env.DB.prepare(
+      `UPDATE manifest_cache SET json = ?, fetched_at = ?, version = version + 1
+       WHERE k = 1 AND version = ?`
+    )
+      .bind(JSON.stringify(files), Date.now(), expectedVersion)
+      .run();
+  }
   return files;
 }
 
@@ -107,11 +121,11 @@ async function getManifest(
   waitUntil: (p: Promise<unknown>) => void
 ): Promise<ManifestFile[]> {
   const row = await env.DB.prepare(
-    "SELECT json, fetched_at FROM manifest_cache WHERE k = 1"
-  ).first<{ json: string; fetched_at: number }>();
-  if (!row) return refreshManifest(env);
+    "SELECT json, fetched_at, version FROM manifest_cache WHERE k = 1"
+  ).first<{ json: string; fetched_at: number; version: number }>();
+  if (!row) return refreshManifest(env, null);
   if (Date.now() - row.fetched_at > MANIFEST_TTL_MS) {
-    waitUntil(refreshManifest(env).catch(() => {}));
+    waitUntil(refreshManifest(env, row.version).catch(() => {}));
   }
   return JSON.parse(row.json) as ManifestFile[];
 }
@@ -124,7 +138,7 @@ async function patchManifest(env: Env, path: string, sha: string | null): Promis
   if (!row) return;
   const files = (JSON.parse(row.json) as ManifestFile[]).filter((f) => f.path !== path);
   if (sha) files.push({ path, sha });
-  await env.DB.prepare("UPDATE manifest_cache SET json = ? WHERE k = 1")
+  await env.DB.prepare("UPDATE manifest_cache SET json = ?, version = version + 1 WHERE k = 1")
     .bind(JSON.stringify(files))
     .run();
 }

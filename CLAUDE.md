@@ -35,7 +35,10 @@ ships to devices). The default worker URL is baked into `app/.env`
    media) must `patchManifest()` synchronously; background revalidation
    (60s TTL, `waitUntil`) covers edits made directly on GitHub. If a write
    path forgets to patch, devices miss changes for up to 60s (and tests
-   won't catch it — check manually).
+   won't catch it — check manually). Refresh write-backs are CAS-guarded by
+   a `version` column: a slow tree fetch must not clobber patches made while
+   it ran (this race actually happened during the Anki bulk import — a card
+   silently vanished from the manifest while sitting safely in GitHub).
 4. **Card identity is the frontmatter `id` (ULID), not the file path.**
    Files can be renamed/moved between deck folders; review history follows
    the id. Files hand-authored without an id get one queued back on first
