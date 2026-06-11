@@ -46,7 +46,7 @@ export default function App() {
   return (
     <div className="min-h-dvh bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <header className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50/90 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/90">
-        <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-2">
+        <div className="mx-auto flex max-w-3xl lg:max-w-4xl items-center gap-2 px-4 py-2">
           <NavLink to="/" className="text-lg font-bold tracking-tight">
             re<span className="text-sky-500">call</span>
           </NavLink>
@@ -73,7 +73,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-4 pb-20 sm:pb-8">
+      <main className="mx-auto max-w-3xl lg:max-w-4xl px-4 py-3 pb-20 sm:pb-8">
         <Routes>
           <Route path="/" element={<Decks />} />
           <Route path="/review/:deck" element={<Review />} />

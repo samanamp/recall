@@ -33,8 +33,25 @@ html {
 .prose pre {
   background-color: #0d1117;
   border: 1px solid rgb(39 39 42);
-  border-radius: 0.75rem;
-  padding: 0.875rem 1rem;
+  border-radius: 0.625rem;
+  padding: 0.625rem 0.875rem;
   font-size: 0.85em;
-  line-height: 1.65;
+  line-height: 1.55;
+}
+
+/* Compact prose: cards are flashcards, not essays. */
+.prose {
+  line-height: 1.55;
+}
+.prose :where(p, ul, ol, pre, table, blockquote, h1, h2, h3) {
+  margin-block: 0.6em;
+}
+.prose :where(li) {
+  margin-block: 0.15em;
+}
+.prose :where(:first-child) {
+  margin-top: 0;
+}
+.prose :where(:last-child) {
+  margin-bottom: 0;
 }

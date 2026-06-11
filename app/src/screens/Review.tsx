@@ -110,11 +110,11 @@ export default function Review() {
         <span className="tabular-nums">{queue.length} left</span>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/70">
         <Markdown text={card.front} />
         {revealed && (
           <>
-            <div className="my-6 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
+            <div className="my-4 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
               <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
               answer
               <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
