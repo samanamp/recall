@@ -2,6 +2,7 @@ import { ulid } from "ulid";
 import { blobToBase64 } from "./api";
 import { cardPath, serializeCardFile } from "./cardfile";
 import { db, getDeviceId, type CardRow } from "./db";
+import { contentHash, optimizeImage } from "./image";
 import { rateCard } from "./scheduler";
 
 /**
@@ -94,10 +95,14 @@ export async function recordReview(
   });
 }
 
-/** Store a pasted image locally and queue its upload. Returns the repo path. */
-export async function addMedia(blob: Blob): Promise<string> {
-  const ext = blob.type.split("/")[1]?.replace("jpeg", "jpg") || "png";
-  const path = `media/${ulid().toLowerCase()}.${ext}`;
+/**
+ * Optimize (downscale + WebP), store locally, queue upload.
+ * Content-hash naming dedupes identical pastes. Returns the repo path.
+ */
+export async function addMedia(input: Blob): Promise<string> {
+  const { blob, ext } = await optimizeImage(input);
+  const path = `media/${await contentHash(blob)}.${ext}`;
+  if (await db.media.get(path)) return path; // already have this exact image
   await db.media.put({ path, sha: "", blob });
   await db.pendingFiles.put({
     path,
