@@ -21,7 +21,9 @@ export default function App() {
 
   async function runSync() {
     setSyncing(true);
-    setLastSync(await syncAll());
+    const result = await syncAll();
+    // ok:false with no errors = skipped (already syncing / offline) — not a failure.
+    if (result.ok || result.errors.length > 0) setLastSync(result);
     setSyncing(false);
   }
 

@@ -34,13 +34,19 @@ export async function syncAll(): Promise<SyncResult> {
   }
   syncing = true;
   try {
-    await pushFiles(result);
-    await pullFiles(result);
-    await pushReviews(result);
-    await pullState();
-  } catch (e) {
-    result.ok = false;
-    result.errors.push(e instanceof Error ? e.message : String(e));
+    // Two independent pipelines: files (repo) and reviews/state (D1).
+    const capture = async (work: Promise<void>) => {
+      try {
+        await work;
+      } catch (e) {
+        result.ok = false;
+        result.errors.push(e instanceof Error ? e.message : String(e));
+      }
+    };
+    await Promise.all([
+      capture(pushFiles(result).then(() => pullFiles(result))),
+      capture(pushReviews(result).then(() => pullState())),
+    ]);
   } finally {
     syncing = false;
   }
