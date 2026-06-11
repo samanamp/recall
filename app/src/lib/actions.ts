@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
 import { blobToBase64 } from "./api";
 import { cardPath, serializeCardFile } from "./cardfile";
-import { db, kvGet, kvSet, type CardRow } from "./db";
+import { db, getDeviceId, type CardRow } from "./db";
 import { rateCard } from "./scheduler";
 
 /**
@@ -92,13 +92,4 @@ export async function addMedia(blob: Blob): Promise<string> {
     queuedAt: Date.now(),
   });
   return path;
-}
-
-export async function getDeviceId(): Promise<string> {
-  let id = await kvGet<string>("deviceId");
-  if (!id) {
-    id = ulid();
-    await kvSet("deviceId", id);
-  }
-  return id;
 }

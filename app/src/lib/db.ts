@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import { ulid } from "ulid";
 
 /** A parsed card, mirrored from `decks/<deck>/<file>.md` in the cards repo. */
 export interface CardRow {
@@ -82,11 +83,20 @@ export interface Settings {
 }
 
 export async function getSettings(): Promise<Settings | null> {
-  const [workerUrl, appToken, deviceId] = await Promise.all([
+  const [workerUrl, appToken] = await Promise.all([
     kvGet<string>("workerUrl"),
     kvGet<string>("appToken"),
-    kvGet<string>("deviceId"),
   ]);
-  if (!workerUrl || !appToken || !deviceId) return null;
-  return { workerUrl, appToken, deviceId };
+  if (!workerUrl || !appToken) return null;
+  return { workerUrl, appToken, deviceId: await getDeviceId() };
+}
+
+/** Stable per-device id for the review log; created on first use. */
+export async function getDeviceId(): Promise<string> {
+  let id = await kvGet<string>("deviceId");
+  if (!id) {
+    id = ulid();
+    await kvSet("deviceId", id);
+  }
+  return id;
 }
