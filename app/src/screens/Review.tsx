@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import Markdown from "../components/Markdown";
 import { recordReview } from "../lib/actions";
 import { db, type CardRow } from "../lib/db";
+import { deckColor } from "../lib/deck-color";
 import { buildAheadQueue, buildQueue, previewIntervals } from "../lib/scheduler";
 
 const RATINGS = [
@@ -122,7 +123,13 @@ export default function Review() {
     <div className="flex min-h-[calc(100dvh-9.5rem)] flex-col sm:min-h-[calc(100dvh-7.5rem)]">
       {/* deck + session progress */}
       <div className="flex items-center gap-3 text-sm text-zinc-500">
-        <span className="font-medium">{deck}</span>
+        <span className="flex items-center gap-1.5 font-medium">
+          <span
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: deckColor(deck) }}
+          />
+          {deck}
+        </span>
         <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
           <div
             className="h-full rounded-full bg-sky-500 transition-all duration-300"
@@ -137,14 +144,14 @@ export default function Review() {
         <div className="w-full rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6 dark:border-zinc-800 dark:bg-zinc-900/70">
           <Markdown text={card.front} className="prose-lg" />
           {revealed && (
-            <>
+            <div className="answer-reveal">
               <div className="my-4 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
                 <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
                 answer
                 <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
               </div>
               <Markdown text={card.back} />
-            </>
+            </div>
           )}
         </div>
       </div>

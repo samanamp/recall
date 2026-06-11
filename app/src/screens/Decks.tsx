@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { createDeck, deleteDeck } from "../lib/actions";
 import { db } from "../lib/db";
+import { deckColor } from "../lib/deck-color";
 import { deckCounts } from "../lib/scheduler";
 
 export default function Decks() {
@@ -117,7 +118,13 @@ export default function Decks() {
             className="group flex flex-col justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:border-sky-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-sky-600"
           >
             <div className="flex items-center justify-between">
-              <span className="font-semibold">{deck.name}</span>
+              <span className="flex items-center gap-2 font-semibold">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: deckColor(deck.name) }}
+                />
+                {deck.name}
+              </span>
               <span className="flex items-center gap-1">
                 <button
                   onClick={(e) => void onDelete(e, deck.name, deck.total)}

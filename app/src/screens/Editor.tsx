@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Markdown from "../components/Markdown";
 import { addMedia, saveCard } from "../lib/actions";
 import { db } from "../lib/db";
+import { deckColor } from "../lib/deck-color";
 import { toggleMarker } from "../lib/markdown-edit";
 
 /**
@@ -25,6 +26,8 @@ export default function Editor() {
     [] as string[]
   );
   const [dragging, setDragging] = useState(false);
+  const [newDeckMode, setNewDeckMode] = useState(false);
+  const [newDeckName, setNewDeckName] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -108,23 +111,62 @@ export default function Editor() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <h1 className="text-xl font-bold tracking-tight">{id ? "Edit card" : "New card"}</h1>
-        <input
-          list="deck-list"
-          value={deck}
-          onChange={(e) => setDeck(e.target.value)}
-          placeholder="Deck"
-          className="ml-auto w-40 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70"
-        />
-        <datalist id="deck-list">
-          {decks.map((d) => <option key={d} value={d} />)}
-        </datalist>
         <button
           onClick={() => void onSave()}
           disabled={!valid || saving}
-          className="rounded-xl bg-sky-600 px-5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 disabled:opacity-40"
+          className="ml-auto rounded-xl bg-sky-600 px-5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 disabled:opacity-40"
         >
           {id ? "Save" : "Add card"}
         </button>
+      </div>
+
+      {/* deck picker: chips beat a datalist, especially on mobile */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {[...new Set(deck && !decks.includes(deck) ? [...decks, deck] : decks)].map((d) => (
+          <button
+            key={d}
+            onClick={() => {
+              setDeck(d);
+              setNewDeckMode(false);
+            }}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+              deck === d
+                ? "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300"
+            }`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: deckColor(d) }} />
+            {d}
+          </button>
+        ))}
+        {newDeckMode ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const name = newDeckName.trim();
+              if (name) setDeck(name);
+              setNewDeckMode(false);
+              setNewDeckName("");
+            }}
+          >
+            <input
+              autoFocus
+              value={newDeckName}
+              onChange={(e) => setNewDeckName(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setNewDeckMode(false)}
+              onBlur={() => setNewDeckMode(false)}
+              placeholder="deck name ⏎"
+              className="w-32 rounded-full border border-sky-500 bg-white px-3 py-1 text-xs outline-none dark:bg-zinc-900"
+            />
+          </form>
+        ) : (
+          <button
+            onClick={() => setNewDeckMode(true)}
+            className="rounded-full border border-dashed border-zinc-300 px-3 py-1 text-xs text-zinc-400 transition-colors hover:border-sky-400 hover:text-sky-500 dark:border-zinc-700"
+          >
+            + new deck
+          </button>
+        )}
       </div>
 
       {/* mobile: write/preview tabs */}

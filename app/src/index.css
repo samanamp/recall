@@ -1,14 +1,41 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
 @import "katex/dist/katex.min.css";
 @import "highlight.js/styles/github-dark.css";
 
 @plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+code,
+pre,
+kbd,
+textarea.font-mono {
+  font-family: var(--font-mono);
+}
 
 /* Class-based dark mode: .dark on <html>, toggled in theme.ts */
 @custom-variant dark (&:where(.dark, .dark *));
 
 html {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Answer reveal: barely-there fade — polish without slowing the loop. */
+@keyframes answer-fade {
+  from {
+    opacity: 0;
+  }
+}
+.answer-reveal {
+  animation: answer-fade 80ms ease-out;
 }
 
 /* Replace the browser's default white focus box with a brand ring. */
