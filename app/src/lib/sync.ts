@@ -1,4 +1,4 @@
-import { api, ApiError, b64ToBytes, b64ToText } from "./api";
+import { api, ApiError, b64ToText } from "./api";
 import { deckFromPath, parseCardFile, serializeCardFile } from "./cardfile";
 import { db, getSettings } from "./db";
 
@@ -101,32 +101,43 @@ async function pullFiles(result: SyncResult): Promise<void> {
     if (deck) await db.decks.put({ name: deck });
   }
 
-  // --- cards ---
+  // --- cards: collect everything that changed, then fetch in batches ---
   const localCards = await db.cards.toArray();
   const localByPath = new Map(localCards.map((c) => [c.path, c]));
 
+  const changed: { path: string; sha: string }[] = [];
   for (const [path, sha] of remote) {
     if (!path.startsWith("decks/") || !path.endsWith(".md")) continue;
     if (pendingPaths.has(path)) continue; // local edit wins until pushed
-    const local = localByPath.get(path);
-    if (local?.sha === sha) continue;
+    if (localByPath.get(path)?.sha === sha) continue;
+    changed.push({ path, sha });
+  }
 
-    const file = await api.getFile(path);
-    const text = b64ToText(file.contentBase64);
-    const { hadId, ...parsed } = parseCardFile(text);
-    if (local && local.id !== parsed.id) await db.cards.delete(local.id);
-    await db.cards.put({ ...parsed, path, sha: file.sha, deck: deckFromPath(path) });
-    result.pulledFiles++;
-
-    // Hand-authored file without an id: normalize so review state stays attached.
-    if (!hadId) {
-      await db.pendingFiles.put({
-        path,
-        op: "put",
-        content: serializeCardFile(parsed),
-        baseSha: file.sha,
-        queuedAt: Date.now(),
+  for (const batch of chunk(changed, 100)) {
+    const { files } = await api.batchFiles(batch);
+    for (const file of files) {
+      const text = b64ToText(file.contentBase64);
+      const { hadId, ...parsed } = parseCardFile(text);
+      const local = localByPath.get(file.path);
+      if (local && local.id !== parsed.id) await db.cards.delete(local.id);
+      await db.cards.put({
+        ...parsed,
+        path: file.path,
+        sha: file.sha,
+        deck: deckFromPath(file.path),
       });
+      result.pulledFiles++;
+
+      // Hand-authored file without an id: normalize so review state stays attached.
+      if (!hadId) {
+        await db.pendingFiles.put({
+          path: file.path,
+          op: "put",
+          content: serializeCardFile(parsed),
+          baseSha: file.sha,
+          queuedAt: Date.now(),
+        });
+      }
     }
   }
 
@@ -138,20 +149,33 @@ async function pullFiles(result: SyncResult): Promise<void> {
     }
   }
 
-  // --- media ---
+  // --- media: raw binary (no base64 overhead), fetched in parallel ---
   const localMedia = await db.media.toArray();
   const mediaByPath = new Map(localMedia.map((m) => [m.path, m]));
+  const changedMedia: { path: string; sha: string }[] = [];
   for (const [path, sha] of remote) {
     if (!path.startsWith("media/") || pendingPaths.has(path)) continue;
     if (mediaByPath.get(path)?.sha === sha) continue;
-    const file = await api.getFile(path);
-    const bytes = b64ToBytes(file.contentBase64);
-    await db.media.put({ path, sha: file.sha, blob: new Blob([bytes.buffer as ArrayBuffer]) });
-    result.pulledFiles++;
+    changedMedia.push({ path, sha });
+  }
+  for (const batch of chunk(changedMedia, 6)) {
+    await Promise.all(
+      batch.map(async ({ path, sha }) => {
+        const blob = await api.getMediaBlob(path);
+        await db.media.put({ path, sha, blob });
+        result.pulledFiles++;
+      })
+    );
   }
   for (const m of localMedia) {
     if (!remote.has(m.path) && !pendingPaths.has(m.path)) await db.media.delete(m.path);
   }
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
 async function pushReviews(result: SyncResult): Promise<void> {

@@ -7,7 +7,6 @@ export default function Settings() {
   const [workerUrl, setWorkerUrl] = useState("");
   const [appToken, setAppToken] = useState("");
   const [theme, setThemeState] = useState<Theme>(getTheme());
-  const [saved, setSaved] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -18,15 +17,11 @@ export default function Settings() {
     void kvGet<string>("appToken").then((v) => setAppToken(v ?? ""));
   }, []);
 
-  async function onSave() {
-    await kvSet("workerUrl", workerUrl.trim());
-    await kvSet("appToken", appToken.trim());
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  }
-
+  /** Save credentials, then sync — one button does both. */
   async function onSync() {
     setSyncing(true);
+    await kvSet("workerUrl", workerUrl.trim());
+    await kvSet("appToken", appToken.trim());
     setSyncResult(await syncAll());
     setSyncing(false);
   }
@@ -78,21 +73,13 @@ export default function Settings() {
             type="password"
             className={input}
           />
-          <div className="flex gap-2">
-            <button
-              onClick={() => void onSave()}
-              className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-500"
-            >
-              {saved ? "Saved ✓" : "Save"}
-            </button>
-            <button
-              onClick={() => void onSync()}
-              disabled={syncing}
-              className="rounded-lg border border-zinc-300 px-4 py-1.5 text-sm hover:border-sky-500 disabled:opacity-50 dark:border-zinc-700"
-            >
-              {syncing ? "Syncing…" : "Sync now"}
-            </button>
-          </div>
+          <button
+            onClick={() => void onSync()}
+            disabled={syncing || !workerUrl.trim() || !appToken.trim()}
+            className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-40"
+          >
+            {syncing ? "Syncing…" : "Sync now"}
+          </button>
           {syncResult && (
             <p className={`text-sm ${syncResult.ok ? "text-emerald-600" : "text-red-500"}`}>
               {syncResult.ok

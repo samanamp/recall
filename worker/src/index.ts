@@ -3,7 +3,9 @@ import { cors } from "hono/cors";
 import { createEmptyCard, fsrs, type Grade } from "ts-fsrs";
 import {
   deleteFile,
+  getBlobBase64,
   getFile,
+  getRawFile,
   getTree,
   GitHubError,
   putFile,
@@ -60,6 +62,38 @@ app.get("/cards/file", async (c) => {
   const path = c.req.query("path");
   if (!path || !isSafePath(path)) return c.json({ error: "bad path" }, 400);
   return c.json(await getFile(c.env, path));
+});
+
+// Bundle endpoint: fetch many blobs in one round trip. The worker hits GitHub
+// in parallel; Cloudflare brotli-compresses the JSON response automatically.
+app.post("/cards/batch", async (c) => {
+  const { items } = await c.req.json<{ items: { path: string; sha: string }[] }>();
+  if (!Array.isArray(items) || items.length === 0 || items.length > 200) {
+    return c.json({ error: "bad request" }, 400);
+  }
+  const files = await Promise.all(
+    items.map(async (it) => ({
+      path: it.path,
+      sha: it.sha,
+      contentBase64: await getBlobBase64(c.env, it.sha),
+    }))
+  );
+  return c.json({ files });
+});
+
+// Raw media bytes — avoids base64's +33% and lets images stream.
+app.get("/media/file", async (c) => {
+  const path = c.req.query("path");
+  if (!path?.startsWith("media/") || !isSafePath(path)) {
+    return c.json({ error: "bad path" }, 400);
+  }
+  const upstream = await getRawFile(c.env, path);
+  return new Response(upstream.body, {
+    headers: {
+      "Content-Type": upstream.headers.get("Content-Type") ?? "application/octet-stream",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
 });
 
 app.put("/cards/file", async (c) => {

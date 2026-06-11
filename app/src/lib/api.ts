@@ -62,6 +62,25 @@ export const api = {
       `/cards/file?path=${encodeURIComponent(path)}`
     ),
 
+  /** Fetch many files in one round trip (worker parallelizes against GitHub). */
+  batchFiles: (items: { path: string; sha: string }[]) =>
+    request<{ files: { path: string; sha: string; contentBase64: string }[] }>(
+      "/cards/batch",
+      { method: "POST", body: JSON.stringify({ items }) }
+    ),
+
+  /** Fetch one media file as a binary blob. */
+  getMediaBlob: async (path: string): Promise<Blob> => {
+    const settings = await getSettings();
+    if (!settings) throw new ApiError(0, "not configured");
+    const res = await fetch(
+      `${settings.workerUrl.replace(/\/$/, "")}/media/file?path=${encodeURIComponent(path)}`,
+      { headers: { Authorization: `Bearer ${settings.appToken}` } }
+    );
+    if (!res.ok) throw new ApiError(res.status, `media ${path}: ${res.status}`);
+    return res.blob();
+  },
+
   putFile: (body: { path: string; content: string; sha?: string; message?: string }) =>
     request<{ sha: string }>("/cards/file", { method: "PUT", body: JSON.stringify(body) }),
 

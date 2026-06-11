@@ -49,6 +49,26 @@ export async function getFile(
   return { path, sha: data.sha, contentBase64: data.content.replace(/\n/g, "") };
 }
 
+/** Fetch a blob by sha (from the manifest tree) — returns base64 content. */
+export async function getBlobBase64(env: GitHubEnv, sha: string): Promise<string> {
+  const res = await fetch(`${API}/repos/${env.GITHUB_REPO}/git/blobs/${sha}`, {
+    headers: headers(env),
+  });
+  if (!res.ok) throw new GitHubError(res.status, await res.text());
+  const data = (await res.json()) as { content: string };
+  return data.content.replace(/\n/g, "");
+}
+
+/** Fetch a file as raw bytes (streamed) — used for media. */
+export async function getRawFile(env: GitHubEnv, path: string): Promise<Response> {
+  const res = await fetch(
+    `${API}/repos/${env.GITHUB_REPO}/contents/${encodePath(path)}?ref=${env.GITHUB_BRANCH}`,
+    { headers: { ...headers(env), Accept: "application/vnd.github.raw+json" } }
+  );
+  if (!res.ok) throw new GitHubError(res.status, await res.text());
+  return res;
+}
+
 /** Create or update a file. `sha` is required when updating, omitted when creating. */
 export async function putFile(
   env: GitHubEnv,
