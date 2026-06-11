@@ -46,7 +46,10 @@ app.onError((err, c) => {
     return c.json({ error: err.message }, status as 404 | 409 | 500);
   }
   console.error(err);
-  return c.json({ error: "internal error" }, 500);
+  // Surface the message — "internal error" hides actionable causes like
+  // "Too many subrequests" and costs a tail-debugging session to find.
+  const message = err instanceof Error ? err.message : String(err);
+  return c.json({ error: `internal: ${message.slice(0, 200)}` }, 500);
 });
 
 // ----------------------------------------------------- FSRS parameters
@@ -160,8 +163,12 @@ app.get("/cards/file", async (c) => {
 // in parallel; Cloudflare brotli-compresses the JSON response automatically.
 app.post("/cards/batch", async (c) => {
   const { items } = await c.req.json<{ items: { path: string; sha: string }[] }>();
-  if (!Array.isArray(items) || items.length === 0 || items.length > 200) {
+  if (!Array.isArray(items) || items.length === 0) {
     return c.json({ error: "bad request" }, 400);
+  }
+  // Each item is one GitHub subrequest; free tier allows 50 per invocation.
+  if (items.length > 45) {
+    return c.json({ error: `too many items (${items.length}); max 45 per batch` }, 400);
   }
   const files = await Promise.all(
     items.map(async (it) => ({

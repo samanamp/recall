@@ -185,7 +185,9 @@ async function pullFiles(
     changed.push({ path, sha });
   }
 
-  for (const batch of chunk(changed, 100)) {
+  // ≤40 per call: each file costs the worker one GitHub subrequest, and the
+  // Cloudflare free tier hard-caps 50 subrequests per invocation.
+  for (const batch of chunk(changed, 40)) {
     const { files } = await api.batchFiles(batch);
     for (const file of files) {
       const text = b64ToText(file.contentBase64);
