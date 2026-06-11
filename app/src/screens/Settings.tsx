@@ -100,6 +100,50 @@ export default function Settings() {
     alert(`Imported ${backup.cards?.length ?? 0} cards.`);
   }
 
+  /**
+   * Recovery hatch for stale-version/schema weirdness: wipe local data and
+   * caches, keep credentials, reload → fresh build + full re-sync.
+   */
+  async function onClearStorage() {
+    const pending = (await db.pendingFiles.count()) + (await db.pendingReviews.count());
+    const warn =
+      pending > 0 ? `\n\n⚠️ ${pending} unsynced change(s) will be LOST.` : "";
+    if (
+      !confirm(
+        `Clear all local data and re-download everything from the server?\n` +
+          `Your worker URL and token are kept.${warn}`
+      )
+    ) {
+      return;
+    }
+    const keep: [string, unknown][] = [];
+    for (const key of ["workerUrl", "appToken", "deviceId"]) {
+      const v = await kvGet(key);
+      if (v !== undefined) keep.push([key, v]);
+    }
+    await Promise.all([
+      db.cards.clear(),
+      db.media.clear(),
+      db.state.clear(),
+      db.pendingFiles.clear(),
+      db.pendingReviews.clear(),
+      db.decks.clear(),
+      db.kv.clear(),
+    ]);
+    for (const [k, v] of keep) await kvSet(k, v);
+    // Stale-build half of the problem: drop the service worker + caches so the
+    // reload fetches the current deployment.
+    if ("serviceWorker" in navigator) {
+      for (const reg of await navigator.serviceWorker.getRegistrations()) {
+        await reg.unregister();
+      }
+    }
+    if ("caches" in window) {
+      for (const key of await caches.keys()) await caches.delete(key);
+    }
+    location.reload();
+  }
+
   const input =
     "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70";
   const label = "mb-1 block text-xs font-medium text-zinc-500";
@@ -249,6 +293,20 @@ export default function Settings() {
             />
           </label>
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-1 font-semibold">Storage</h2>
+        <p className="mb-3 text-sm text-zinc-500">
+          If the app misbehaves after an update (stale version, sync weirdness), reset the
+          local copy. Cards and reviews live on the server — they re-download on next sync.
+        </p>
+        <button
+          onClick={() => void onClearStorage()}
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 shadow-sm transition-colors hover:border-red-400 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400 dark:hover:border-red-700"
+        >
+          Clear local data & reload
+        </button>
       </section>
     </div>
   );
