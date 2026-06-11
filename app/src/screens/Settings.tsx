@@ -7,9 +7,7 @@ import { configureScheduler } from "../lib/scheduler";
 import { requestSync, syncAll, type SyncResult } from "../lib/sync";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
 
-// Matches Anki's guidance: the FSRS optimizer needs substantial cross-day
-// history; below ~400 reviews fsrs-rs aborts with NotEnoughData.
-const OPTIMIZE_MIN_REVIEWS = 400;
+const OPTIMIZE_MIN_REVIEWS = 100;
 
 export default function Settings() {
   const [workerUrl, setWorkerUrl] = useState("");
@@ -197,7 +195,7 @@ export default function Settings() {
             <p className="mt-1.5 text-xs text-zinc-500">
               {reviewCount >= OPTIMIZE_MIN_REVIEWS
                 ? `Fits the scheduler to your ${reviewCount} logged reviews (runs on-device).`
-                : `Unlocks at ${OPTIMIZE_MIN_REVIEWS} reviews (the optimizer needs cross-day history; same bar Anki uses) — ${reviewCount} logged so far.`}
+                : `Unlocks at ${OPTIMIZE_MIN_REVIEWS} reviews — ${reviewCount} logged so far. (More history, especially across days, gives a better fit.)`}
               {params?.weights && " Currently using your personalized parameters."}
             </p>
           </div>

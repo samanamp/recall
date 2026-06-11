@@ -12,10 +12,17 @@ import { api } from "./api";
 export interface TrainingData {
   ratings: number[];
   deltas: number[]; // whole days since the card's previous review
-  lengths: number[]; // reviews per card
+  lengths: number[]; // reviews per training item
 }
 
-/** Pure data prep — exported for tests. */
+/**
+ * Pure data prep — exported for tests.
+ *
+ * fsrs-rs expects the standard FSRS training-set construction: one item per
+ * CROSS-DAY review, containing the card's full history prefix up to and
+ * including that review. (Its pretrain stage keys on items with exactly one
+ * long-term review; passing one whole-history item per card starves it.)
+ */
 export function prepTrainingData(
   reviews: { card_id: string; rating: number; reviewed_at: number }[]
 ): TrainingData {
@@ -42,11 +49,13 @@ export function prepTrainingData(
       cardDeltas.push(prevDay === null ? 0 : Math.max(0, day - prevDay));
       prevDay = day;
     }
-    // fsrs-rs rejects items whose reviews all fall on one day (no delta > 0).
-    if (!cardDeltas.some((d) => d > 0)) continue;
-    ratings.push(...cardRatings);
-    deltas.push(...cardDeltas);
-    lengths.push(cardRatings.length);
+    // One training item per cross-day review: the history prefix ending there.
+    for (let i = 1; i < cardDeltas.length; i++) {
+      if (cardDeltas[i] === 0) continue;
+      ratings.push(...cardRatings.slice(0, i + 1));
+      deltas.push(...cardDeltas.slice(0, i + 1));
+      lengths.push(i + 1);
+    }
   }
   return { ratings, deltas, lengths };
 }

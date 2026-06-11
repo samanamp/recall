@@ -8,12 +8,13 @@ function r(card: string, day: number, rating: number) {
   return { card_id: card, rating, reviewed_at: T0 + day * DAY };
 }
 
-describe("optimizer training-data prep", () => {
-  it("groups reviews per card with day-granularity deltas", () => {
+describe("optimizer training-data prep (FSRS prefix items)", () => {
+  it("emits one history-prefix item per cross-day review", () => {
     const data = prepTrainingData([r("a", 0, 3), r("a", 1, 3), r("a", 4, 4)]);
-    expect(data.lengths).toEqual([3]);
-    expect(data.ratings).toEqual([3, 3, 4]);
-    expect(data.deltas).toEqual([0, 1, 3]); // first review delta is 0
+    // two cross-day reviews -> two items: [d0,d1] and [d0,d1,d4]
+    expect(data.lengths).toEqual([2, 3]);
+    expect(data.ratings).toEqual([3, 3, 3, 3, 4]);
+    expect(data.deltas).toEqual([0, 1, 0, 1, 3]);
   });
 
   it("drops single-review cards (no signal)", () => {
@@ -28,24 +29,24 @@ describe("optimizer training-data prep", () => {
     expect(data.deltas).toEqual([0, 5]);
   });
 
-  it("drops cards whose reviews all fall on one day (fsrs-rs rejects them)", () => {
+  it("produces no items for cards whose reviews all fall on one day", () => {
     const data = prepTrainingData([
       { card_id: "a", rating: 1, reviewed_at: T0 },
       { card_id: "a", rating: 3, reviewed_at: T0 + 600_000 }, // 10 min later
       r("b", 0, 3),
       r("b", 2, 3),
     ]);
-    expect(data.lengths).toEqual([2]); // only card b survives
+    expect(data.lengths).toEqual([2]); // only card b yields an item
     expect(data.deltas).toEqual([0, 2]);
   });
 
-  it("keeps same-day learning steps when the card also has cross-day reviews", () => {
+  it("same-day learning steps stay inside the prefix of a cross-day item", () => {
     const data = prepTrainingData([
       { card_id: "a", rating: 3, reviewed_at: T0 },
       { card_id: "a", rating: 3, reviewed_at: T0 + 600_000 },
       r("a", 3, 3),
     ]);
-    expect(data.lengths).toEqual([3]);
+    expect(data.lengths).toEqual([3]); // one item: the full 3-review prefix
     expect(data.deltas).toEqual([0, 0, 3]);
   });
 
