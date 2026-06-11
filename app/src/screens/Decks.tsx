@@ -86,31 +86,29 @@ export default function Decks() {
 
   return (
     <div>
-      <div className="mb-4 flex items-baseline justify-between">
-        <h1 className="text-xl font-bold tracking-tight">Decks</h1>
-        {totalCards > 0 && (
-          <span className="text-sm text-zinc-500">
-            {plural(totalCards, "card")}
-            {totalDue > 0 && (
-              <> · <span className="font-medium text-emerald-600 dark:text-emerald-400">{totalDue} due</span></>
-            )}
-          </span>
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-xl font-bold tracking-tight">Decks</h1>
+          {totalCards > 0 && (
+            <span className="text-sm text-zinc-500">{plural(totalCards, "card")}</span>
+          )}
+        </div>
+        {totalDue + totalNew > 0 ? (
+          <Link
+            to="/review"
+            className="flex items-center gap-2 rounded-full bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500"
+          >
+            Study all
+            <span className="text-xs font-medium text-sky-200 tabular-nums">
+              {totalDue > 0 && `${totalDue} due`}
+              {totalDue > 0 && totalNew > 0 && " · "}
+              {totalNew > 0 && `${totalNew} new`}
+            </span>
+          </Link>
+        ) : (
+          totalCards > 0 && <span className="text-sm text-zinc-400">all done ✓</span>
         )}
       </div>
-
-      {totalDue + totalNew > 0 && (
-        <Link
-          to="/review"
-          className="mb-4 flex items-center justify-center gap-2 rounded-2xl bg-sky-600 py-3.5 font-semibold text-white shadow-sm transition-colors hover:bg-sky-500"
-        >
-          Study all
-          <span className="rounded-full bg-white/20 px-2 py-0.5 text-sm tabular-nums">
-            {totalDue > 0 && `${totalDue} due`}
-            {totalDue > 0 && totalNew > 0 && " · "}
-            {totalNew > 0 && `${totalNew} new`}
-          </span>
-        </Link>
-      )}
 
       {decks.length === 0 && (
         <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-8 text-center text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
