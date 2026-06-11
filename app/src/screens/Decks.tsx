@@ -42,6 +42,7 @@ export default function Decks() {
 
   const totalCards = decks.reduce((n, d) => n + d.total, 0);
   const totalDue = decks.reduce((n, d) => n + d.due, 0);
+  const totalNew = decks.reduce((n, d) => n + d.newCards, 0);
 
   const newDeckTile = adding ? (
     <form
@@ -96,6 +97,20 @@ export default function Decks() {
           </span>
         )}
       </div>
+
+      {totalDue + totalNew > 0 && (
+        <Link
+          to="/review"
+          className="mb-4 flex items-center justify-center gap-2 rounded-2xl bg-sky-600 py-3.5 font-semibold text-white shadow-sm transition-colors hover:bg-sky-500"
+        >
+          Study all
+          <span className="rounded-full bg-white/20 px-2 py-0.5 text-sm tabular-nums">
+            {totalDue > 0 && `${totalDue} due`}
+            {totalDue > 0 && totalNew > 0 && " · "}
+            {totalNew > 0 && `${totalNew} new`}
+          </span>
+        </Link>
+      )}
 
       {decks.length === 0 && (
         <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-8 text-center text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
@@ -153,7 +168,9 @@ export default function Decks() {
               )}
               {deck.due === 0 && deck.newCards === 0 && (
                 <span className="rounded-full bg-zinc-500/10 px-2 py-0.5 text-zinc-500">
-                  done for today ✓
+                  done ✓
+                  {deck.nextInDays !== undefined &&
+                    ` · next ${deck.nextInDays === 1 ? "tomorrow" : `in ${deck.nextInDays}d`}`}
                 </span>
               )}
               <span className="ml-auto text-zinc-400">{plural(deck.total, "card")}</span>

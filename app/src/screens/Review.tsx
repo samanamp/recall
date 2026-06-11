@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Markdown from "../components/Markdown";
-import { recordReview } from "../lib/actions";
+import { recordReview, undoReview, type ReviewUndo } from "../lib/actions";
 import { db, type CardRow } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
 import { buildAheadQueue, buildQueue, previewIntervals } from "../lib/scheduler";
@@ -30,13 +30,15 @@ const RATINGS = [
 ] as const;
 
 export default function Review() {
-  const deck = decodeURIComponent(useParams().deck ?? "");
+  const deckParam = useParams().deck;
+  const deck = deckParam ? decodeURIComponent(deckParam) : null; // null = all decks
   const [queue, setQueue] = useState<string[] | null>(null);
   const [card, setCard] = useState<CardRow | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [intervals, setIntervals] = useState<Record<1 | 2 | 3 | 4, string> | null>(null);
   const [done, setDone] = useState(0);
   const [ahead, setAhead] = useState<string[]>([]);
+  const [undoStack, setUndoStack] = useState<ReviewUndo[]>([]);
 
   const loadNext = useCallback(async (q: string[]) => {
     // Skip ids whose card was deleted meanwhile.
@@ -69,18 +71,33 @@ export default function Review() {
   const rate = useCallback(
     async (rating: 1 | 2 | 3 | 4) => {
       if (!card || !queue) return;
-      await recordReview(card.id, rating);
+      const undo = await recordReview(card.id, rating);
+      setUndoStack((s) => [...s.slice(-49), undo]);
       setDone((d) => d + 1);
       await loadNext(queue.slice(1));
     },
     [card, queue, loadNext]
   );
 
-  // Keyboard: space/enter reveals, 1-4 rates.
+  /** Reverse the last rating and bring that card back, answer shown. */
+  const onUndo = useCallback(async () => {
+    const undo = undoStack[undoStack.length - 1];
+    if (!undo) return;
+    setUndoStack((s) => s.slice(0, -1));
+    await undoReview(undo);
+    setDone((d) => Math.max(0, d - 1));
+    await loadNext([undo.cardId, ...(queue ?? [])]);
+    setRevealed(true);
+  }, [undoStack, queue, loadNext]);
+
+  // Keyboard: space/enter reveals, 1-4 rates, z undoes.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (!revealed && (e.key === " " || e.key === "Enter")) {
+      if (e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        void onUndo();
+      } else if (!revealed && (e.key === " " || e.key === "Enter")) {
         e.preventDefault();
         setRevealed(true);
       } else if (revealed && ["1", "2", "3", "4"].includes(e.key)) {
@@ -89,7 +106,7 @@ export default function Review() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [revealed, rate]);
+  }, [revealed, rate, onUndo]);
 
   if (queue === null) return null;
 
@@ -101,6 +118,14 @@ export default function Review() {
           {done > 0 ? "Deck finished" : "Nothing due"}
         </p>
         <p className="text-sm text-zinc-500">{done} reviews this session</p>
+        {undoStack.length > 0 && (
+          <button
+            onClick={() => void onUndo()}
+            className="mt-2 text-xs text-zinc-400 hover:text-sky-500"
+          >
+            ↩ undo last rating
+          </button>
+        )}
         {ahead.length > 0 && (
           <button
             onClick={() => void loadNext(ahead)}
@@ -124,11 +149,13 @@ export default function Review() {
       {/* deck + session progress */}
       <div className="flex items-center gap-3 text-sm text-zinc-500">
         <span className="flex items-center gap-1.5 font-medium">
-          <span
-            className="h-2 w-2 shrink-0 rounded-full"
-            style={{ backgroundColor: deckColor(deck) }}
-          />
-          {deck}
+          {deck && (
+            <span
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: deckColor(deck) }}
+            />
+          )}
+          {deck ?? "all decks"}
         </span>
         <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
           <div
@@ -141,7 +168,24 @@ export default function Review() {
 
       {/* the card is the hero: centered in the free space, scrolls if long */}
       <div className="flex flex-1 items-center py-4">
-        <div className="w-full rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6 dark:border-zinc-800 dark:bg-zinc-900/70">
+        <div
+          onClick={() => {
+            // tap anywhere on the card to reveal (unless selecting text)
+            if (!revealed && !window.getSelection()?.toString()) setRevealed(true);
+          }}
+          className={`w-full rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6 dark:border-zinc-800 dark:bg-zinc-900/70 ${
+            revealed ? "" : "cursor-pointer"
+          }`}
+        >
+          {deck === null && (
+            <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-zinc-400">
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: deckColor(card.deck) }}
+              />
+              {card.deck}
+            </div>
+          )}
           <Markdown text={card.front} className="prose-lg" />
           {revealed && (
             <div className="answer-reveal">
@@ -182,8 +226,16 @@ export default function Review() {
           </div>
         )}
         <div className="mt-2 text-center text-xs text-zinc-400">
+          {undoStack.length > 0 && (
+            <>
+              <button onClick={() => void onUndo()} className="hover:text-sky-500">
+                ↩ undo
+              </button>
+              {" · "}
+            </>
+          )}
           <Link to={`/edit/${card.id}`} className="hover:text-sky-500">edit card</Link>
-          <span className="hidden sm:inline"> · space to reveal · 1–4 to rate</span>
+          <span className="hidden sm:inline"> · space reveal · 1–4 rate · z undo</span>
         </div>
       </div>
     </div>

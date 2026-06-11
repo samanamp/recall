@@ -79,7 +79,11 @@ function humanInterval(ms: number): string {
 export interface DeckCounts {
   due: number;
   newCards: number;
+  /** Days until the next scheduled card when nothing is due (1 = tomorrow). */
+  nextInDays?: number;
 }
+
+const DAY = 86_400_000;
 
 /**
  * Day-granularity due cutoff (Anki convention): a card due any time today
@@ -105,15 +109,21 @@ export async function deckCounts(now: Date): Promise<Map<string, DeckCounts>> {
     const s = stateById.get(card.id);
     if (!s) entry.newCards++;
     else if (s.due <= cutoff) entry.due++;
+    else {
+      const days = Math.ceil((s.due - cutoff) / DAY);
+      if (entry.nextInDays === undefined || days < entry.nextInDays) entry.nextInDays = days;
+    }
     counts.set(card.deck, entry);
   }
   return counts;
 }
 
-/** Build the review queue for a deck: due cards (oldest first), then new. */
-export async function buildQueue(deck: string, now: Date): Promise<string[]> {
+/** Build the review queue (deck, or all decks when null): due first, then new. */
+export async function buildQueue(deck: string | null, now: Date): Promise<string[]> {
   const cutoff = dueCutoff(now);
-  const cards = await db.cards.where("deck").equals(deck).toArray();
+  const cards = deck
+    ? await db.cards.where("deck").equals(deck).toArray()
+    : await db.cards.toArray();
   const states = await db.state.bulkGet(cards.map((c) => c.id));
   const due: { id: string; due: number }[] = [];
   const fresh: string[] = [];
@@ -130,10 +140,16 @@ export async function buildQueue(deck: string, now: Date): Promise<string[]> {
  * Cards due within the next `days` beyond today — for studying ahead.
  * Reviewing early is sound: FSRS factors the shorter elapsed time in.
  */
-export async function buildAheadQueue(deck: string, now: Date, days = 7): Promise<string[]> {
+export async function buildAheadQueue(
+  deck: string | null,
+  now: Date,
+  days = 7
+): Promise<string[]> {
   const cutoff = dueCutoff(now);
-  const horizon = cutoff + days * 86_400_000;
-  const cards = await db.cards.where("deck").equals(deck).toArray();
+  const horizon = cutoff + days * DAY;
+  const cards = deck
+    ? await db.cards.where("deck").equals(deck).toArray()
+    : await db.cards.toArray();
   const states = await db.state.bulkGet(cards.map((c) => c.id));
   const upcoming: { id: string; due: number }[] = [];
   cards.forEach((card, i) => {

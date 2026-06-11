@@ -383,6 +383,27 @@ app.post("/reviews", async (c) => {
   return c.json({ ok: true, accepted: reviews.length });
 });
 
+// Undo support: remove one review and re-derive the card's state.
+app.delete("/reviews", async (c) => {
+  const { id } = await c.req.json<{ id: string }>();
+  if (!id) return c.json({ error: "bad request" }, 400);
+  const row = await c.env.DB.prepare("SELECT card_id FROM reviews WHERE id = ?")
+    .bind(id)
+    .first<{ card_id: string }>();
+  if (!row) return c.json({ ok: true, missing: true }); // never pushed or already undone
+  await c.env.DB.prepare("DELETE FROM reviews WHERE id = ?").bind(id).run();
+  const scheduler = makeScheduler(await getParams(c.env.DB));
+  await replayCard(c.env.DB, row.card_id, scheduler);
+  // Last review gone → replay no-ops; drop the stale derived state (card is new again).
+  const remain = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM reviews WHERE card_id = ?")
+    .bind(row.card_id)
+    .first<{ n: number }>();
+  if (!remain?.n) {
+    await c.env.DB.prepare("DELETE FROM card_state WHERE card_id = ?").bind(row.card_id).run();
+  }
+  return c.json({ ok: true });
+});
+
 // Full review log — input for the client-side FSRS optimizer.
 app.get("/reviews/export", async (c) => {
   const { results } = await c.env.DB.prepare(

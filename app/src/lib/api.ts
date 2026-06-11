@@ -81,6 +81,13 @@ export const api = {
       accepted: number;
     }>("/sync", { method: "POST", body: JSON.stringify({ reviews, cursor }) }),
 
+  /** Undo: remove one review server-side; the worker re-derives card state. */
+  deleteReview: (id: string) =>
+    request<{ ok: true; missing?: true }>("/reviews", {
+      method: "DELETE",
+      body: JSON.stringify({ id }),
+    }),
+
   putParams: (body: { retention?: number; weights?: number[] | null }) =>
     request<{ ok: true; rescheduled: number }>("/params", {
       method: "PUT",

@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
-import { blobToBase64 } from "./api";
+import { api, blobToBase64 } from "./api";
 import { cardPath, serializeCardFile } from "./cardfile";
-import { db, getDeviceId, type CardRow } from "./db";
+import { db, getDeviceId, type CardRow, type StateRow } from "./db";
 import { contentHash, optimizeImage } from "./image";
 import { requestSync } from "./sync";
 import { rateCard } from "./scheduler";
@@ -101,22 +101,48 @@ async function queueDelete(path: string, sha: string | null): Promise<void> {
   await db.pendingFiles.put({ path, op: "delete", baseSha: sha, queuedAt: Date.now() });
 }
 
+/** Everything needed to reverse a rating (see undoReview). */
+export interface ReviewUndo {
+  reviewId: string;
+  cardId: string;
+  prevState: StateRow | undefined; // undefined = card was new
+}
+
 /** Record a rating: update local FSRS state and queue the review for upload. */
 export async function recordReview(
   cardId: string,
   rating: 1 | 2 | 3 | 4,
   now = new Date()
-): Promise<void> {
+): Promise<ReviewUndo> {
   const row = await db.state.get(cardId);
   await db.state.put(rateCard(row, cardId, rating, now));
+  const reviewId = ulid();
   await db.pendingReviews.put({
-    id: ulid(),
+    id: reviewId,
     cardId,
     rating,
     reviewedAt: now.getTime(),
     deviceId: await getDeviceId(),
   });
   requestSync(2000); // coalesces across a burst of ratings
+  return { reviewId, cardId, prevState: row };
+}
+
+/**
+ * Reverse a rating. If the review is still queued locally it just gets
+ * dropped; if it already reached the server, the worker deletes it from the
+ * log and replays the card. Local FSRS state is restored either way.
+ */
+export async function undoReview(undo: ReviewUndo): Promise<void> {
+  const pending = await db.pendingReviews.get(undo.reviewId);
+  if (pending) {
+    await db.pendingReviews.delete(undo.reviewId);
+  } else {
+    await api.deleteReview(undo.reviewId);
+  }
+  if (undo.prevState) await db.state.put(undo.prevState);
+  else await db.state.delete(undo.cardId);
+  requestSync(500);
 }
 
 /**

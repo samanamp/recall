@@ -79,6 +79,7 @@ export default function App() {
       <main className="mx-auto max-w-3xl lg:max-w-4xl px-4 py-3 pb-20 sm:pb-8">
         <Routes>
           <Route path="/" element={<Decks />} />
+          <Route path="/review" element={<Review />} />
           <Route path="/review/:deck" element={<Review />} />
           <Route path="/new" element={<Editor />} />
           <Route path="/edit/:id" element={<Editor />} />
