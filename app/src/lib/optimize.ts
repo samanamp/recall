@@ -33,14 +33,20 @@ export function prepTrainingData(
   for (const revs of byCard.values()) {
     if (revs.length < 2) continue; // single-review cards carry no signal
     revs.sort((a, b) => a.t - b.t);
+    const cardRatings: number[] = [];
+    const cardDeltas: number[] = [];
     let prevDay: number | null = null;
     for (const r of revs) {
       const day = Math.floor(r.t / DAY);
-      ratings.push(Math.min(4, Math.max(1, r.rating)));
-      deltas.push(prevDay === null ? 0 : Math.max(0, day - prevDay));
+      cardRatings.push(Math.min(4, Math.max(1, r.rating)));
+      cardDeltas.push(prevDay === null ? 0 : Math.max(0, day - prevDay));
       prevDay = day;
     }
-    lengths.push(revs.length);
+    // fsrs-rs rejects items whose reviews all fall on one day (no delta > 0).
+    if (!cardDeltas.some((d) => d > 0)) continue;
+    ratings.push(...cardRatings);
+    deltas.push(...cardDeltas);
+    lengths.push(cardRatings.length);
   }
   return { ratings, deltas, lengths };
 }
@@ -53,10 +59,13 @@ export async function optimizeParameters(): Promise<{ weights: number[]; reviews
   await mod.default();
 
   const { ratings, deltas, lengths } = prepTrainingData(reviews);
+  const crossDayItems = deltas.filter((d) => d > 0).length;
   if (lengths.length === 0) throw new Error("not enough multi-review cards to optimize yet");
 
-  const fsrs = new mod.Fsrs();
   try {
+    // NOTE: computeParameters consumes the Fsrs instance (__destroy_into_raw)
+    // — do NOT call .free() afterwards, that's a null-pointer crash.
+    const fsrs = new mod.Fsrs();
     const w = fsrs.computeParameters(
       new Uint32Array(ratings),
       new Uint32Array(deltas),
@@ -65,7 +74,11 @@ export async function optimizeParameters(): Promise<{ weights: number[]; reviews
       true // short-term (same-day) memory component
     );
     return { weights: [...w], reviews: ratings.length };
-  } finally {
-    fsrs.free();
+  } catch {
+    // fsrs-rs panics (NotEnoughData) surface as opaque wasm RuntimeErrors.
+    throw new Error(
+      `not enough optimizable history yet (${crossDayItems} cross-day reviews) — ` +
+        "the optimizer needs reviews spread across more days. Keep reviewing!"
+    );
   }
 }
