@@ -4,7 +4,9 @@
  * the sync transfer, and every device's IndexedDB all win.
  */
 
-const MAX_DIM = 1400;
+// Target: a ~500px-wide mobile screen at 2x DPR. Text in screenshots stays
+// legible on Retina; files land roughly half the size of the old 1400px cap.
+const MAX_DIM = 1000;
 const WEBP_QUALITY = 0.8;
 const JPEG_QUALITY = 0.85; // Safari fallback when WebP encode is unsupported
 
