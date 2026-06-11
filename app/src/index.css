@@ -1,0 +1,17 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+@import "highlight.js/styles/github-dark.css";
+
+@plugin "@tailwindcss/typography";
+
+/* Class-based dark mode: .dark on <html>, toggled in theme.ts */
+@custom-variant dark (&:where(.dark, .dark *));
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Code blocks keep the dark theme in light mode too — better for code. */
+.prose pre {
+  background-color: #0d1117;
+}
