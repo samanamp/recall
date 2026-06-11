@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import Markdown from "../components/Markdown";
 import { recordReview } from "../lib/actions";
 import { db, type CardRow } from "../lib/db";
-import { buildQueue, previewIntervals } from "../lib/scheduler";
+import { buildAheadQueue, buildQueue, previewIntervals } from "../lib/scheduler";
 
 const RATINGS = [
   {
@@ -35,6 +35,7 @@ export default function Review() {
   const [revealed, setRevealed] = useState(false);
   const [intervals, setIntervals] = useState<Record<1 | 2 | 3 | 4, string> | null>(null);
   const [done, setDone] = useState(0);
+  const [ahead, setAhead] = useState<string[]>([]);
 
   const loadNext = useCallback(async (q: string[]) => {
     // Skip ids whose card was deleted meanwhile.
@@ -56,6 +57,7 @@ export default function Review() {
     } else {
       setQueue([]);
       setCard(null);
+      setAhead(await buildAheadQueue(deck, new Date()));
     }
   }, [deck]);
 
@@ -94,9 +96,21 @@ export default function Review() {
     return (
       <div className="mt-16 text-center">
         <p className="text-4xl">🎉</p>
-        <p className="mt-4 text-lg font-medium">Deck finished</p>
+        <p className="mt-4 text-lg font-medium">
+          {done > 0 ? "Deck finished" : "Nothing due"}
+        </p>
         <p className="text-sm text-zinc-500">{done} reviews this session</p>
-        <Link to="/" className="mt-4 inline-block text-sky-500">← Back to decks</Link>
+        {ahead.length > 0 && (
+          <button
+            onClick={() => void loadNext(ahead)}
+            className="mt-5 rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-colors hover:border-sky-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-sky-600"
+          >
+            Study ahead — {ahead.length} due in the next 7 days
+          </button>
+        )}
+        <div>
+          <Link to="/" className="mt-4 inline-block text-sky-500">← Back to decks</Link>
+        </div>
       </div>
     );
   }

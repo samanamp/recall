@@ -125,3 +125,21 @@ export async function buildQueue(deck: string, now: Date): Promise<string[]> {
   due.sort((a, b) => a.due - b.due);
   return [...due.map((d) => d.id), ...fresh];
 }
+
+/**
+ * Cards due within the next `days` beyond today — for studying ahead.
+ * Reviewing early is sound: FSRS factors the shorter elapsed time in.
+ */
+export async function buildAheadQueue(deck: string, now: Date, days = 7): Promise<string[]> {
+  const cutoff = dueCutoff(now);
+  const horizon = cutoff + days * 86_400_000;
+  const cards = await db.cards.where("deck").equals(deck).toArray();
+  const states = await db.state.bulkGet(cards.map((c) => c.id));
+  const upcoming: { id: string; due: number }[] = [];
+  cards.forEach((card, i) => {
+    const s = states[i];
+    if (s && s.due > cutoff && s.due <= horizon) upcoming.push({ id: card.id, due: s.due });
+  });
+  upcoming.sort((a, b) => a.due - b.due);
+  return upcoming.map((u) => u.id);
+}

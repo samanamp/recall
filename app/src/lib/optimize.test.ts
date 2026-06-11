@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { prepTrainingData } from "./optimize";
+import { lapseRate, prepTrainingData } from "./optimize";
 
 const DAY = 86_400_000;
 const T0 = Date.UTC(2026, 0, 1, 12);
@@ -52,5 +52,13 @@ describe("optimizer training-data prep (FSRS prefix items)", () => {
 
   it("handles an empty log", () => {
     expect(prepTrainingData([])).toEqual({ ratings: [], deltas: [], lengths: [] });
+  });
+});
+
+describe("lapseRate (optimizer failure-signal guard)", () => {
+  it("computes the share of Again ratings", () => {
+    expect(lapseRate([{ rating: 1 }, { rating: 3 }, { rating: 3 }, { rating: 1 }])).toBe(0.5);
+    expect(lapseRate([{ rating: 2 }, { rating: 3 }])).toBe(0); // Hard is a pass
+    expect(lapseRate([])).toBe(0);
   });
 });

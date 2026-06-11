@@ -60,12 +60,29 @@ export function prepTrainingData(
   return { ratings, deltas, lengths };
 }
 
+/** Share of Again ratings — the optimizer's only failure signal. */
+export function lapseRate(reviews: { rating: number }[]): number {
+  if (reviews.length === 0) return 0;
+  return reviews.filter((r) => r.rating === 1).length / reviews.length;
+}
+
 export async function optimizeParameters(): Promise<{ weights: number[]; reviews: number }> {
   const [{ reviews }, mod] = await Promise.all([
     api.exportReviews(),
     import("fsrs-browser"),
   ]);
   await mod.default();
+
+  // FSRS treats Hard as a SUCCESSFUL recall; Again is the only failure. A log
+  // with almost no Agains has no forgetting signal — the fit concludes you
+  // never forget and balloons every interval. Refuse rather than mis-fit.
+  if (lapseRate(reviews) < 0.02) {
+    throw new Error(
+      "your review log has almost no 'Again' ratings, so there's no forgetting " +
+        "signal to fit (FSRS counts Hard as a successful recall). Press Again " +
+        "when you actually forget a card, then re-optimize once some are logged."
+    );
+  }
 
   const { ratings, deltas, lengths } = prepTrainingData(reviews);
   const crossDayItems = deltas.filter((d) => d > 0).length;
