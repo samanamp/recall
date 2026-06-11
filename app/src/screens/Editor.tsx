@@ -28,6 +28,7 @@ export default function Editor() {
   const [dragging, setDragging] = useState(false);
   const [newDeckMode, setNewDeckMode] = useState(false);
   const [newDeckName, setNewDeckName] = useState("");
+  const [justAdded, setJustAdded] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -64,6 +65,9 @@ export default function Editor() {
     } else if (key === "i") {
       e.preventDefault();
       toggleWrap("*");
+    } else if (key === "enter") {
+      e.preventDefault();
+      void onSave();
     }
   }
 
@@ -93,7 +97,7 @@ export default function Editor() {
   }
 
   async function onSave() {
-    if (!deck.trim() || !front) return;
+    if (!deck.trim() || !front || saving) return;
     setSaving(true);
     await saveCard({ id, deck: deck.trim(), front, back });
     if (id) {
@@ -101,6 +105,8 @@ export default function Editor() {
     } else {
       setText("");
       setSaving(false);
+      setJustAdded(true);
+      setTimeout(() => setJustAdded(false), 1200);
       textareaRef.current?.focus();
     }
   }
@@ -113,10 +119,12 @@ export default function Editor() {
         <h1 className="text-xl font-bold tracking-tight">{id ? "Edit card" : "New card"}</h1>
         <button
           onClick={() => void onSave()}
-          disabled={!valid || saving}
-          className="ml-auto rounded-xl bg-sky-600 px-5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 disabled:opacity-40"
+          disabled={(!valid || saving) && !justAdded}
+          className={`ml-auto rounded-xl px-5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-40 ${
+            justAdded ? "bg-emerald-600" : "bg-sky-600 hover:bg-sky-500"
+          }`}
         >
-          {id ? "Save" : "Add card"}
+          {justAdded ? "Added ✓" : id ? "Save" : "Add card"}
         </button>
       </div>
 
@@ -187,7 +195,7 @@ export default function Editor() {
       </div>
 
       <div className="hidden grid-cols-2 gap-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 sm:grid">
-        <span>Write — front, ---, back · ⌘B bold · ⌘I italic</span>
+        <span>Write — front, ---, back · ⌘B bold · ⌘I italic · ⌘⏎ save</span>
         <span>Preview</span>
       </div>
 

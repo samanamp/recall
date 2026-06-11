@@ -28,6 +28,16 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Accessibility: kill animations for users who asked for that. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Answer reveal: barely-there fade — polish without slowing the loop. */
 @keyframes answer-fade {
   from {

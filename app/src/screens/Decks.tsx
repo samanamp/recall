@@ -123,12 +123,12 @@ export default function Decks() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {decks.map((deck) => (
           <Link
             key={deck.name}
             to={`/review/${encodeURIComponent(deck.name)}`}
-            className="group flex flex-col justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:border-sky-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-sky-600"
+            className="group flex flex-col justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:border-sky-400 hover:shadow-md dark:border-zinc-700/60 dark:bg-zinc-900 dark:hover:border-sky-600"
           >
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 font-semibold">
@@ -138,20 +138,15 @@ export default function Decks() {
                 />
                 {deck.name}
               </span>
-              <span className="flex items-center gap-1">
-                <button
-                  onClick={(e) => void onDelete(e, deck.name, deck.total)}
-                  title="Delete deck"
-                  className="rounded-md p-1 text-zinc-300 opacity-60 transition-colors hover:bg-red-50 hover:text-red-500 hover:opacity-100 dark:text-zinc-600 dark:hover:bg-red-950/50"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                    <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                  </svg>
-                </button>
-                <span className="text-zinc-300 transition-transform group-hover:translate-x-0.5 group-hover:text-sky-500 dark:text-zinc-600">
-                  →
-                </span>
-              </span>
+              <button
+                onClick={(e) => void onDelete(e, deck.name, deck.total)}
+                title="Delete deck"
+                className="-m-1 rounded-lg p-2 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 dark:text-zinc-600 dark:hover:bg-red-950/50"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                </svg>
+              </button>
             </div>
             <div className="flex items-center gap-1.5 text-xs">
               {deck.due > 0 && (
