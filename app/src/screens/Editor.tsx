@@ -39,6 +39,54 @@ export default function Editor() {
   const front = split[0]?.trim() ?? "";
   const back = split[1]?.trim() ?? "";
 
+  /** Wrap/unwrap the selection with a markdown marker (Ctrl/Cmd+B, +I). */
+  function toggleWrap(marker: string) {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const { selectionStart: s, selectionEnd: e } = ta;
+    const sel = text.slice(s, e);
+    const before = text.slice(0, s);
+    const after = text.slice(e);
+    const m = marker.length;
+
+    let next: string;
+    let selS: number;
+    let selE: number;
+    if (sel.startsWith(marker) && sel.endsWith(marker) && sel.length >= 2 * m) {
+      // selection includes the markers — strip them
+      const inner = sel.slice(m, -m);
+      next = before + inner + after;
+      selS = s;
+      selE = s + inner.length;
+    } else if (before.endsWith(marker) && after.startsWith(marker)) {
+      // markers sit just outside the selection — strip them
+      next = before.slice(0, -m) + sel + after.slice(m);
+      selS = s - m;
+      selE = e - m;
+    } else {
+      next = before + marker + sel + marker + after;
+      selS = s + m;
+      selE = e + m;
+    }
+    setText(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(selS, selE);
+    });
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (key === "b") {
+      e.preventDefault();
+      toggleWrap("**");
+    } else if (key === "i") {
+      e.preventDefault();
+      toggleWrap("*");
+    }
+  }
+
   /** Store the image, insert its markdown reference at the cursor. */
   async function insertImage(file: File | Blob) {
     const path = await addMedia(file);
@@ -120,7 +168,7 @@ export default function Editor() {
       </div>
 
       <div className="hidden grid-cols-2 gap-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 sm:grid">
-        <span>Write — front, ---, back</span>
+        <span>Write — front, ---, back · ⌘B bold · ⌘I italic</span>
         <span>Preview</span>
       </div>
 
@@ -129,6 +177,7 @@ export default function Editor() {
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={onKeyDown}
           onPaste={onPaste}
           onDrop={onDrop}
           onDragOver={(e) => {
