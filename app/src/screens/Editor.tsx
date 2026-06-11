@@ -118,12 +118,12 @@ export default function Editor() {
             "Front of the card (markdown, $math$, ```code```)…\n---\nBack of the card. Paste images directly."
           }
           spellCheck={false}
-          className={`min-h-[50dvh] w-full resize-y rounded-xl border border-zinc-300 bg-transparent p-3 font-mono text-sm outline-none focus:border-sky-500 dark:border-zinc-700 ${
+          className={`min-h-[50dvh] w-full resize-y rounded-xl border border-zinc-200 bg-white p-3 font-mono text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70 ${
             mobileTab === "preview" ? "hidden sm:block" : ""
           }`}
         />
         <div
-          className={`min-h-[50dvh] overflow-auto rounded-xl border border-zinc-200 p-3 dark:border-zinc-800 ${
+          className={`min-h-[50dvh] overflow-auto rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70 ${
             mobileTab === "write" ? "hidden sm:block" : ""
           }`}
         >

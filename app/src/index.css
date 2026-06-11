@@ -11,7 +11,30 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Inline code: subtle pill, and kill the typography plugin's backticks. */
+.prose :where(code)::before,
+.prose :where(code)::after {
+  content: none;
+}
+.prose :where(:not(pre) > code) {
+  background: rgb(244 244 245); /* zinc-100 */
+  border: 1px solid rgb(228 228 231); /* zinc-200 */
+  padding: 0.1em 0.4em;
+  border-radius: 0.4em;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+.dark .prose :where(:not(pre) > code) {
+  background: rgb(39 39 42); /* zinc-800 */
+  border-color: rgb(63 63 70); /* zinc-700 */
+}
+
 /* Code blocks keep the dark theme in light mode too — better for code. */
 .prose pre {
   background-color: #0d1117;
+  border: 1px solid rgb(39 39 42);
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  font-size: 0.85em;
+  line-height: 1.65;
 }

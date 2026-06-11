@@ -39,7 +39,7 @@ export default function Decks() {
         <li key={deck.name}>
           <Link
             to={`/review/${encodeURIComponent(deck.name)}`}
-            className="flex items-center justify-between rounded-xl border border-zinc-200 px-4 py-3 transition-colors hover:border-sky-400 dark:border-zinc-800 dark:hover:border-sky-600"
+            className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm transition-colors hover:border-sky-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-sky-600"
           >
             <div>
               <div className="font-medium">{deck.name}</div>

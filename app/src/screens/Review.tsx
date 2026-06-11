@@ -7,10 +7,26 @@ import { buildQueue, previewIntervals } from "../lib/scheduler";
 import { syncAll } from "../lib/sync";
 
 const RATINGS = [
-  { value: 1, label: "Again", cls: "bg-red-600 hover:bg-red-500" },
-  { value: 2, label: "Hard", cls: "bg-amber-600 hover:bg-amber-500" },
-  { value: 3, label: "Good", cls: "bg-emerald-600 hover:bg-emerald-500" },
-  { value: 4, label: "Easy", cls: "bg-sky-600 hover:bg-sky-500" },
+  {
+    value: 1,
+    label: "Again",
+    cls: "border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400",
+  },
+  {
+    value: 2,
+    label: "Hard",
+    cls: "border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 dark:text-amber-400",
+  },
+  {
+    value: 3,
+    label: "Good",
+    cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400",
+  },
+  {
+    value: 4,
+    label: "Easy",
+    cls: "border-sky-500/30 bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 dark:text-sky-400",
+  },
 ] as const;
 
 export default function Review() {
@@ -94,11 +110,15 @@ export default function Review() {
         <span className="tabular-nums">{queue.length} left</span>
       </div>
 
-      <div className="min-h-[40dvh] rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
         <Markdown text={card.front} />
         {revealed && (
           <>
-            <hr className="my-4 border-zinc-200 dark:border-zinc-800" />
+            <div className="my-6 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
+              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+              answer
+              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+            </div>
             <Markdown text={card.back} />
           </>
         )}
@@ -108,7 +128,7 @@ export default function Review() {
         {!revealed ? (
           <button
             onClick={() => setRevealed(true)}
-            className="w-full rounded-xl bg-zinc-800 py-4 text-lg font-medium text-white hover:bg-zinc-700 dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            className="w-full rounded-xl bg-sky-600 py-3.5 font-semibold text-white shadow-sm transition-colors hover:bg-sky-500"
           >
             Show answer
           </button>
@@ -118,10 +138,10 @@ export default function Review() {
               <button
                 key={r.value}
                 onClick={() => void rate(r.value)}
-                className={`rounded-xl py-3 text-white transition-colors ${r.cls}`}
+                className={`rounded-xl border py-2.5 transition-colors ${r.cls}`}
               >
-                <div className="font-medium">{r.label}</div>
-                <div className="text-xs opacity-80">{intervals?.[r.value]}</div>
+                <div className="text-sm font-semibold">{r.label}</div>
+                <div className="text-xs tabular-nums opacity-60">{intervals?.[r.value]}</div>
               </button>
             ))}
           </div>
