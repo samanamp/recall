@@ -96,6 +96,14 @@ mobile @2x DPR), WebP q0.8, content-hash dedupe. GIF/SVG pass through.
   keep GitHub off the hot path (see invariant 3).
 - Browser image APIs (`createImageBitmap`, `OffscreenCanvas`) don't exist in
   node — only `contentHash`/passthrough paths of image.ts are unit-testable.
+- Anki imports: key everything by `cards.id` (cid), NOT `notes.id` — they
+  usually match but cids can be nid+1, and a mismatch silently drops that
+  card's revlog (cards then look "new"). Always reconcile sent-review counts
+  against Anki's per-deck revlog total. Anki v3 scheduler ease is 1-4 for
+  every review type (identity mapping; do not remap learn-phase eases).
+- fsrs-browser `computeParameters` needs FSRS prefix items (one per
+  cross-day review, history up to it), not whole-card items; and it
+  *consumes* the Fsrs instance — never call `.free()` after it.
 
 ## Testing & CI
 
