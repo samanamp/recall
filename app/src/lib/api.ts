@@ -36,11 +36,22 @@ async function request<T>(
       ...init.headers,
     },
   });
+  const body = await res.text().catch(() => "");
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
+    if (res.status === 401) {
+      throw new ApiError(401, "401: app token rejected — check it matches the worker's APP_TOKEN");
+    }
     throw new ApiError(res.status, `${res.status}: ${body.slice(0, 200)}`);
   }
-  return res.json() as Promise<T>;
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    // HTML instead of JSON ⇒ the URL points at a website, not the worker API.
+    throw new ApiError(
+      0,
+      "Worker URL returned a webpage, not JSON — use the recall-api workers.dev URL in Settings, not the app's URL"
+    );
+  }
 }
 
 export const api = {
