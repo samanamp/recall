@@ -14,9 +14,17 @@ import { db } from "../lib/db";
  * Heavy (katex + highlight.js) — only ever import via Markdown.tsx (lazy),
  * so the initial bundle stays small and the deck list boots fast.
  */
-export default function MarkdownInner({ text }: { text: string }) {
+export default function MarkdownInner({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
   return (
-    <div className="prose prose-zinc max-w-none dark:prose-invert prose-img:rounded-lg">
+    <div
+      className={`prose prose-zinc max-w-none dark:prose-invert prose-img:rounded-lg ${className ?? ""}`}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex, rehypeHighlight]}

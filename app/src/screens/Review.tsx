@@ -103,45 +103,61 @@ export default function Review() {
     );
   }
 
+  const total = done + queue.length;
+  const progress = total > 0 ? (done / total) * 100 : 0;
+
   return (
-    <div className="flex flex-col">
-      <div className="mb-3 flex items-baseline justify-between text-sm text-zinc-500">
-        <span>{deck}</span>
+    <div className="flex min-h-[calc(100dvh-9.5rem)] flex-col sm:min-h-[calc(100dvh-7.5rem)]">
+      {/* deck + session progress */}
+      <div className="flex items-center gap-3 text-sm text-zinc-500">
+        <span className="font-medium">{deck}</span>
+        <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-sky-500 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
         <span className="tabular-nums">{queue.length} left</span>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/70">
-        <Markdown text={card.front} />
-        {revealed && (
-          <>
-            <div className="my-4 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
-              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-              answer
-              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-            </div>
-            <Markdown text={card.back} />
-          </>
-        )}
+      {/* the card is the hero: centered in the free space, scrolls if long */}
+      <div className="flex flex-1 items-center py-4">
+        <div className="w-full rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6 dark:border-zinc-800 dark:bg-zinc-900/70">
+          <Markdown text={card.front} className="prose-lg" />
+          {revealed && (
+            <>
+              <div className="my-4 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
+                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+                answer
+                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+              <Markdown text={card.back} />
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="mt-4">
+      {/* controls live in a fixed-height slot so nothing jumps on reveal */}
+      <div className="mx-auto flex h-20 w-full max-w-xl flex-col justify-start">
         {!revealed ? (
           <button
             onClick={() => setRevealed(true)}
-            className="w-full rounded-xl bg-sky-600 py-3.5 font-semibold text-white shadow-sm transition-colors hover:bg-sky-500"
+            className="h-12 w-full rounded-xl bg-sky-600 font-semibold text-white shadow-sm transition-colors hover:bg-sky-500"
           >
             Show answer
           </button>
         ) : (
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid h-12 grid-cols-4 gap-2">
             {RATINGS.map((r) => (
               <button
                 key={r.value}
                 onClick={() => void rate(r.value)}
-                className={`rounded-xl border py-2.5 transition-colors ${r.cls}`}
+                className={`flex flex-col items-center justify-center rounded-xl border leading-tight transition-colors ${r.cls}`}
               >
-                <div className="text-sm font-semibold">{r.label}</div>
-                <div className="text-xs tabular-nums opacity-60">{intervals?.[r.value]}</div>
+                <span className="text-sm font-semibold">{r.label}</span>
+                <span className="text-[11px] tabular-nums opacity-60">
+                  {intervals?.[r.value]}
+                </span>
               </button>
             ))}
           </div>
