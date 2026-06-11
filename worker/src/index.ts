@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createEmptyCard, fsrs, type Grade } from "ts-fsrs";
+import { fsrs } from "ts-fsrs";
+import { replayReviews } from "./replay";
 import {
   deleteFile,
   getBlobBase64,
@@ -354,12 +355,8 @@ async function replayCard(
     )
     .bind(cardId)
     .all<{ rating: number; reviewed_at: number }>();
-  if (results.length === 0) return;
-
-  let card = createEmptyCard(new Date(results[0].reviewed_at));
-  for (const r of results) {
-    card = scheduler.next(card, new Date(r.reviewed_at), r.rating as Grade).card;
-  }
+  const card = replayReviews(results, scheduler);
+  if (!card) return;
 
   await db
     .prepare(

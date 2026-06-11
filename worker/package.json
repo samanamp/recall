@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +17,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260610.1",
     "typescript": "^6.0.3",
+    "vitest": "^4.1.8",
     "wrangler": "^4.99.0"
   }
 }

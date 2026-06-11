@@ -9,13 +9,16 @@ import { api } from "./api";
  *   delta_ts — days since that card's previous review (0 for the first)
  *   lengths  — reviews per card, delimiting the flat arrays
  */
-export async function optimizeParameters(): Promise<{ weights: number[]; reviews: number }> {
-  const [{ reviews }, mod] = await Promise.all([
-    api.exportReviews(),
-    import("fsrs-browser"),
-  ]);
-  await mod.default();
+export interface TrainingData {
+  ratings: number[];
+  deltas: number[]; // whole days since the card's previous review
+  lengths: number[]; // reviews per card
+}
 
+/** Pure data prep — exported for tests. */
+export function prepTrainingData(
+  reviews: { card_id: string; rating: number; reviewed_at: number }[]
+): TrainingData {
   const byCard = new Map<string, { rating: number; t: number }[]>();
   for (const r of reviews) {
     const list = byCard.get(r.card_id) ?? [];
@@ -39,6 +42,17 @@ export async function optimizeParameters(): Promise<{ weights: number[]; reviews
     }
     lengths.push(revs.length);
   }
+  return { ratings, deltas, lengths };
+}
+
+export async function optimizeParameters(): Promise<{ weights: number[]; reviews: number }> {
+  const [{ reviews }, mod] = await Promise.all([
+    api.exportReviews(),
+    import("fsrs-browser"),
+  ]);
+  await mod.default();
+
+  const { ratings, deltas, lengths } = prepTrainingData(reviews);
   if (lengths.length === 0) throw new Error("not enough multi-review cards to optimize yet");
 
   const fsrs = new mod.Fsrs();
