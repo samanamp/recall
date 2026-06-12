@@ -170,6 +170,8 @@ export default function Review() {
       {/* the card is the hero: centered in the free space, scrolls if long */}
       <div className="flex flex-1 items-center py-4">
         <div
+          role={revealed ? undefined : "button"}
+          aria-label={revealed ? undefined : "Show answer"}
           onClick={() => {
             // tap anywhere on the card to reveal (unless selecting text)
             if (!revealed && !window.getSelection()?.toString()) setRevealed(true);

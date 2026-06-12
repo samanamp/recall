@@ -123,10 +123,15 @@ export async function deckCounts(now: Date): Promise<Map<string, DeckCounts>> {
  * New cards are capped per day (avalanche prevention — every new card is a
  * scheduling commitment that comes due within days).
  */
+/** Remaining new-card introductions allowed today. */
+export async function newBudget(now: Date): Promise<number> {
+  const newPerDay = (await kvGet<number>("newPerDay")) ?? 20;
+  return Math.max(0, newPerDay - (await introducedToday(now)));
+}
+
 export async function buildQueue(deck: string | null, now: Date): Promise<string[]> {
   const cutoff = dueCutoff(now);
-  const newPerDay = (await kvGet<number>("newPerDay")) ?? 20;
-  const newBudget = Math.max(0, newPerDay - (await introducedToday(now)));
+  const budget = await newBudget(now);
   const cards = deck
     ? await db.cards.where("deck").equals(deck).toArray()
     : await db.cards.toArray();
@@ -139,7 +144,7 @@ export async function buildQueue(deck: string | null, now: Date): Promise<string
     else if (s.due <= cutoff) due.push({ id: card.id, due: s.due });
   });
   due.sort((a, b) => a.due - b.due);
-  return [...due.map((d) => d.id), ...fresh.slice(0, newBudget)];
+  return [...due.map((d) => d.id), ...fresh.slice(0, budget)];
 }
 
 /**

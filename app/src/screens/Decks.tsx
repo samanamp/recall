@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { createDeck, deleteDeck } from "../lib/actions";
 import { db } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
-import { deckCounts } from "../lib/scheduler";
+import { deckCounts, newBudget } from "../lib/scheduler";
 
 export default function Decks() {
   const [adding, setAdding] = useState(false);
@@ -28,21 +28,35 @@ export default function Decks() {
   }
 
   const decks = useLiveQuery(async () => {
-    const counts = await deckCounts(new Date());
+    const now = new Date();
+    const [counts, budget] = await Promise.all([deckCounts(now), newBudget(now)]);
     const totals = new Map<string, number>();
     for (const c of await db.cards.toArray()) {
       totals.set(c.deck, (totals.get(c.deck) ?? 0) + 1);
     }
-    return [...counts.entries()]
-      .map(([name, c]) => ({ name, ...c, total: totals.get(name) ?? 0 }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    // Show new counts the queue will actually serve today (budget-capped),
+    // so tiles never advertise cards a session won't deliver.
+    return {
+      budget,
+      list: [...counts.entries()]
+        .map(([name, c]) => ({
+          name,
+          ...c,
+          newCards: Math.min(c.newCards, budget),
+          total: totals.get(name) ?? 0,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    };
   }, []);
 
   if (!decks) return null;
 
-  const totalCards = decks.reduce((n, d) => n + d.total, 0);
-  const totalDue = decks.reduce((n, d) => n + d.due, 0);
-  const totalNew = decks.reduce((n, d) => n + d.newCards, 0);
+  const totalCards = decks.list.reduce((n, d) => n + d.total, 0);
+  const totalDue = decks.list.reduce((n, d) => n + d.due, 0);
+  const totalNew = Math.min(
+    decks.budget,
+    decks.list.reduce((n, d) => n + d.newCards, 0)
+  );
 
   const newDeckTile = adding ? (
     <form
@@ -110,7 +124,7 @@ export default function Decks() {
         )}
       </div>
 
-      {decks.length === 0 && (
+      {decks.list.length === 0 && (
         <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-8 text-center text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
           <p className="text-3xl">🗂️</p>
           <p className="mt-3">No decks yet — create one below, then{" "}
@@ -124,7 +138,7 @@ export default function Decks() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {decks.map((deck) => (
+        {decks.list.map((deck) => (
           <Link
             key={deck.name}
             to={`/review/${encodeURIComponent(deck.name)}`}

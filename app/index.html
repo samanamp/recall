@@ -7,6 +7,19 @@
     <meta name="theme-color" content="#0f172a" />
     <link rel="preconnect" href="https://recall-api.info-d80.workers.dev" crossorigin />
     <title>recall</title>
+    <!-- pre-paint theme guard: no white flash on dark-mode cold loads -->
+    <style>
+      html { background-color: #fafafa; }
+      html.dark { background-color: #09090b; }
+    </style>
+    <script>
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)) {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

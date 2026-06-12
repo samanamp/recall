@@ -1,40 +1,59 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { kvGet, kvSet } from "../lib/db";
 
 interface Daily {
   day: string;
   n: number;
   again: number;
 }
+interface StatsData {
+  daily: Daily[];
+  forecast: { day: string; n: number }[];
+}
 
 const DAY = 86_400_000;
 const WEEKS = 17; // heatmap span
 
 export default function Stats() {
-  const [daily, setDaily] = useState<Daily[] | null>(null);
-  const [forecast, setForecast] = useState<{ day: string; n: number }[]>([]);
+  const [data, setData] = useState<StatsData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const heatmapRef = useRef<HTMLDivElement>(null);
 
+  // stale-while-revalidate: render the cached stats instantly, refresh behind
   useEffect(() => {
+    void kvGet<StatsData>("statsCache").then((cached) => {
+      if (cached) setData((d) => d ?? cached);
+    });
     api
       .stats()
       .then((s) => {
-        setDaily(s.daily);
-        setForecast(s.forecast);
+        setData(s);
+        void kvSet("statsCache", s);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setData((d) => (d ? d : (setError(String(e)), null))));
   }, []);
 
-  if (error) return <p className="text-sm text-red-500">✗ {error}</p>;
-  if (!daily) return null;
+  // the interesting edge of the heatmap is the most recent week
+  useEffect(() => {
+    const el = heatmapRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [data]);
+
+  if (error && !data) return <p className="text-sm text-red-500">✗ {error}</p>;
+  if (!data) return null;
+  const { daily, forecast } = data;
 
   const byDay = new Map(daily.map((d) => [d.day, d]));
   const today = localISO(new Date());
 
-  // headline numbers
+  // headline numbers — Again rate over 30 days, not all-time: the imported
+  // history predates honest Again-pressing and would drown the signal.
   const totalReviews = daily.reduce((a, d) => a + d.n, 0);
-  const totalAgain = daily.reduce((a, d) => a + d.again, 0);
-  const againRate = totalReviews > 0 ? (totalAgain / totalReviews) * 100 : 0;
+  const recent = daily.filter((d) => Date.now() - new Date(d.day).getTime() < 30 * DAY);
+  const recentN = recent.reduce((a, d) => a + d.n, 0);
+  const recentAgain = recent.reduce((a, d) => a + d.again, 0);
+  const againRate = recentN > 0 ? (recentAgain / recentN) * 100 : 0;
   const todayN = byDay.get(today)?.n ?? 0;
   const last7 = sumRange(byDay, 6);
   const streak = computeStreak(byDay, today);
@@ -59,7 +78,7 @@ export default function Stats() {
         <StatCard label="Today" value={String(todayN)} />
         <StatCard label="Last 7 days" value={String(last7)} />
         <StatCard
-          label="Again rate"
+          label="Again rate (30d)"
           value={`${againRate.toFixed(1)}%`}
           hint={
             againRate < 2
@@ -73,7 +92,7 @@ export default function Stats() {
         <h2 className="mb-3 font-semibold">
           Activity <span className="text-sm font-normal text-zinc-500">· {totalReviews} reviews all-time</span>
         </h2>
-        <div className="grid grid-flow-col grid-rows-7 gap-1 overflow-x-auto pb-1">
+        <div ref={heatmapRef} className="grid grid-flow-col grid-rows-7 gap-1 overflow-x-auto pb-1">
           {days.map(({ iso, n, future }) => (
             <div
               key={iso}
