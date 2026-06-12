@@ -16,6 +16,7 @@ export default function Settings() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [retention, setRetention] = useState(0.9);
+  const [newPerDay, setNewPerDay] = useState(20);
   const [optimizing, setOptimizing] = useState(false);
   const [algoMsg, setAlgoMsg] = useState<string | null>(null);
   const retentionTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -29,6 +30,7 @@ export default function Settings() {
     );
     void kvGet<string>("appToken").then((v) => setAppToken(v ?? ""));
     void kvGet<FsrsParams>("fsrsParams").then((p) => p && setRetention(p.retention));
+    void kvGet<number>("newPerDay").then((v) => v !== undefined && setNewPerDay(v));
   }, []);
 
   /** Persist retention everywhere: server (reschedules all cards), kv, scheduler. */
@@ -222,6 +224,27 @@ export default function Settings() {
               <span>fewer reviews</span>
               <span>remember more</span>
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-500">
+              New cards per day
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={500}
+              value={newPerDay}
+              onChange={(e) => {
+                const v = Math.max(0, Math.min(500, Number(e.target.value) || 0));
+                setNewPerDay(v);
+                void kvSet("newPerDay", v);
+              }}
+              className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70"
+            />
+            <p className="mt-1 text-xs text-zinc-500">
+              Caps daily introductions — every new card becomes reviews due within days.
+            </p>
           </div>
 
           <div>

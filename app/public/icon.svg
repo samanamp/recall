@@ -2,5 +2,5 @@
   <rect width="128" height="128" rx="24" fill="#0f172a"/>
   <rect x="20" y="28" width="88" height="60" rx="8" fill="#38bdf8"/>
   <rect x="28" y="44" width="72" height="52" rx="8" fill="#0ea5e9"/>
-  <text x="64" y="86" font-family="monospace" font-size="40" font-weight="bold" fill="#f8fafc" text-anchor="middle">md</text>
+  <text x="64" y="86" font-family="ui-monospace, monospace" font-size="38" font-weight="bold" fill="#f8fafc" text-anchor="middle">re</text>
 </svg>

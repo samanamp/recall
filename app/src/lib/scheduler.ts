@@ -6,7 +6,7 @@ import {
   type Card as FsrsCard,
   type Grade,
 } from "ts-fsrs";
-import { db, type StateRow } from "./db";
+import { db, introducedToday, kvGet, type StateRow } from "./db";
 
 let scheduler = fsrs();
 
@@ -118,9 +118,15 @@ export async function deckCounts(now: Date): Promise<Map<string, DeckCounts>> {
   return counts;
 }
 
-/** Build the review queue (deck, or all decks when null): due first, then new. */
+/**
+ * Build the review queue (deck, or all decks when null): due first, then new.
+ * New cards are capped per day (avalanche prevention — every new card is a
+ * scheduling commitment that comes due within days).
+ */
 export async function buildQueue(deck: string | null, now: Date): Promise<string[]> {
   const cutoff = dueCutoff(now);
+  const newPerDay = (await kvGet<number>("newPerDay")) ?? 20;
+  const newBudget = Math.max(0, newPerDay - (await introducedToday(now)));
   const cards = deck
     ? await db.cards.where("deck").equals(deck).toArray()
     : await db.cards.toArray();
@@ -133,7 +139,7 @@ export async function buildQueue(deck: string | null, now: Date): Promise<string
     else if (s.due <= cutoff) due.push({ id: card.id, due: s.due });
   });
   due.sort((a, b) => a.due - b.due);
-  return [...due.map((d) => d.id), ...fresh];
+  return [...due.map((d) => d.id), ...fresh.slice(0, newBudget)];
 }
 
 /**

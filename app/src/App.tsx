@@ -8,6 +8,7 @@ import Review from "./screens/Review";
 import Editor from "./screens/Editor";
 import Browser from "./screens/Browser";
 import Settings from "./screens/Settings";
+import Stats from "./screens/Stats";
 
 export default function App() {
   const [sync, setSync] = useState<SyncStatus>({ syncing: false, last: null });
@@ -40,6 +41,7 @@ export default function App() {
             <NavLink to="/" end className={tab}>Decks</NavLink>
             <NavLink to="/new" className={tab}>Add</NavLink>
             <NavLink to="/browse" className={tab}>Browse</NavLink>
+            <NavLink to="/stats" className={tab}>Stats</NavLink>
             <NavLink to="/settings" className={tab}>Settings</NavLink>
           </nav>
           <button
@@ -84,6 +86,7 @@ export default function App() {
           <Route path="/new" element={<Editor />} />
           <Route path="/edit/:id" element={<Editor />} />
           <Route path="/browse" element={<Browser />} />
+          <Route path="/stats" element={<Stats />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
@@ -93,6 +96,7 @@ export default function App() {
         <NavLink to="/" end className={tab}>Decks</NavLink>
         <NavLink to="/new" className={tab}>Add</NavLink>
         <NavLink to="/browse" className={tab}>Browse</NavLink>
+        <NavLink to="/stats" className={tab}>Stats</NavLink>
         <NavLink to="/settings" className={tab}>Settings</NavLink>
       </nav>
     </div>

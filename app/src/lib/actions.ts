@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
 import { api, blobToBase64 } from "./api";
 import { cardPath, serializeCardFile } from "./cardfile";
-import { db, getDeviceId, type CardRow, type StateRow } from "./db";
+import { bumpIntroducedToday, db, getDeviceId, type CardRow, type StateRow } from "./db";
 import { contentHash, optimizeImage } from "./image";
 import { requestSync } from "./sync";
 import { rateCard } from "./scheduler";
@@ -115,6 +115,7 @@ export async function recordReview(
   now = new Date()
 ): Promise<ReviewUndo> {
   const row = await db.state.get(cardId);
+  if (!row) await bumpIntroducedToday(+1, now); // first-ever review = introduction
   await db.state.put(rateCard(row, cardId, rating, now));
   const reviewId = ulid();
   await db.pendingReviews.put({
@@ -141,7 +142,10 @@ export async function undoReview(undo: ReviewUndo): Promise<void> {
     await api.deleteReview(undo.reviewId);
   }
   if (undo.prevState) await db.state.put(undo.prevState);
-  else await db.state.delete(undo.cardId);
+  else {
+    await db.state.delete(undo.cardId);
+    await bumpIntroducedToday(-1, new Date()); // un-introduce
+  }
   requestSync(500);
 }
 

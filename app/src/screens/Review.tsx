@@ -49,6 +49,7 @@ export default function Review() {
         setCard(next);
         setRevealed(false);
         setIntervals(previewIntervals(await db.state.get(next.id), new Date()));
+        window.scrollTo({ top: 0 }); // long cards leave the page scrolled down
         return;
       }
       q = q.slice(1);

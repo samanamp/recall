@@ -94,6 +94,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  stats: () =>
+    request<{
+      daily: { day: string; n: number; again: number }[];
+      forecast: { day: string; n: number }[];
+    }>(`/stats?tz=${new Date().getTimezoneOffset()}`),
+
   exportReviews: () =>
     request<{ reviews: { card_id: string; rating: number; reviewed_at: number }[] }>(
       "/reviews/export"

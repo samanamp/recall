@@ -101,6 +101,26 @@ export async function getSettings(): Promise<Settings | null> {
   return { workerUrl, appToken, deviceId: await getDeviceId() };
 }
 
+/**
+ * Daily new-card introduction counter (per device — good enough for a cap
+ * whose purpose is avalanche prevention, not bookkeeping).
+ */
+export async function bumpIntroducedToday(delta: number, now: Date): Promise<void> {
+  const day = localDay(now);
+  const cur = await kvGet<{ day: string; n: number }>("introducedToday");
+  const n = cur?.day === day ? cur.n : 0;
+  await kvSet("introducedToday", { day, n: Math.max(0, n + delta) });
+}
+
+export async function introducedToday(now: Date): Promise<number> {
+  const cur = await kvGet<{ day: string; n: number }>("introducedToday");
+  return cur?.day === localDay(now) ? cur.n : 0;
+}
+
+function localDay(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
 /** Stable per-device id for the review log; created on first use. */
 export async function getDeviceId(): Promise<string> {
   let id = await kvGet<string>("deviceId");

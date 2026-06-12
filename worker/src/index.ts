@@ -404,6 +404,32 @@ app.delete("/reviews", async (c) => {
   return c.json({ ok: true });
 });
 
+// Aggregated stats for the Stats screen. `tz` = client UTC offset in minutes
+// (Date.getTimezoneOffset() convention: positive west of UTC) so day
+// boundaries match the user's wall clock.
+app.get("/stats", async (c) => {
+  const tz = Number(c.req.query("tz") ?? 0);
+  const shift = -tz * 60; // seconds to ADD to epoch for local-day bucketing
+  const [daily, forecast] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT date(reviewed_at/1000 + ?, 'unixepoch') AS day,
+              COUNT(*) AS n,
+              SUM(rating = 1) AS again
+       FROM reviews GROUP BY day ORDER BY day`
+    )
+      .bind(shift)
+      .all<{ day: string; n: number; again: number }>(),
+    c.env.DB.prepare(
+      `SELECT date(due/1000 + ?, 'unixepoch') AS day, COUNT(*) AS n
+       FROM card_state WHERE due/1000 + ? > unixepoch()
+       GROUP BY day ORDER BY day LIMIT 14`
+    )
+      .bind(shift, shift)
+      .all<{ day: string; n: number }>(),
+  ]);
+  return c.json({ daily: daily.results, forecast: forecast.results });
+});
+
 // Full review log — input for the client-side FSRS optimizer.
 app.get("/reviews/export", async (c) => {
   const { results } = await c.env.DB.prepare(
