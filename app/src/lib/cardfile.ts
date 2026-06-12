@@ -55,6 +55,20 @@ export function parseCardFile(text: string): ParsedCard {
   };
 }
 
+/**
+ * Split editor text into front/back on the FIRST `---` line only.
+ * String.split with a limit discards everything after the second match,
+ * which would silently eat back content containing a markdown hr.
+ */
+export function splitFrontBack(text: string): { front: string; back: string } {
+  const sep = text.match(/\n---[ \t]*\n/);
+  if (!sep || sep.index === undefined) return { front: text.trim(), back: "" };
+  return {
+    front: text.slice(0, sep.index).trim(),
+    back: text.slice(sep.index + sep[0].length).trim(),
+  };
+}
+
 export function serializeCardFile(card: Pick<CardRow, "id" | "created" | "front" | "back">): string {
   return `---\nid: ${card.id}\ncreated: ${card.created}\n---\n${card.front.trim()}\n---\n${card.back.trim()}\n`;
 }

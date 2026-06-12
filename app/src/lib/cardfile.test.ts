@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardPath, deckFromPath, parseCardFile, serializeCardFile, slugify } from "./cardfile";
+import { cardPath, deckFromPath, parseCardFile, serializeCardFile, slugify, splitFrontBack } from "./cardfile";
 
 describe("card file format", () => {
   it("round-trips serialize → parse", () => {
@@ -53,5 +53,26 @@ describe("card file format", () => {
     expect(cardPath("rust", "01ABC", "Borrow checker?")).toBe(
       "decks/rust/01abc-borrow-checker.md"
     );
+  });
+});
+
+describe("splitFrontBack", () => {
+  it("splits on the first --- line", () => {
+    expect(splitFrontBack("front\n---\nback")).toEqual({ front: "front", back: "back" });
+  });
+
+  it("keeps back content after a second --- (markdown hr)", () => {
+    expect(splitFrontBack("front\n---\nback top\n---\nback bottom")).toEqual({
+      front: "front",
+      back: "back top\n---\nback bottom",
+    });
+  });
+
+  it("treats everything as front when there is no separator", () => {
+    expect(splitFrontBack("just a front")).toEqual({ front: "just a front", back: "" });
+  });
+
+  it("tolerates trailing spaces on the separator line", () => {
+    expect(splitFrontBack("front\n---  \nback")).toEqual({ front: "front", back: "back" });
   });
 });

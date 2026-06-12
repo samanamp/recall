@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import Markdown from "../components/Markdown";
 import { addMedia, saveCard } from "../lib/actions";
+import { splitFrontBack } from "../lib/cardfile";
 import { db } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
 import { toggleMarker } from "../lib/markdown-edit";
@@ -15,7 +16,8 @@ export default function Editor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [deck, setDeck] = useState("");
-  const [text, setText] = useState("");
+  // New-card drafts survive accidental navigation; edit mode loads from the card.
+  const [text, setText] = useState(() => (id ? "" : localStorage.getItem("editorDraft") ?? ""));
   const [mobileTab, setMobileTab] = useState<"write" | "preview">("write");
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -40,9 +42,18 @@ export default function Editor() {
     });
   }, [id]);
 
-  const split = text.split(/\n---\s*\n/, 2);
-  const front = split[0]?.trim() ?? "";
-  const back = split[1]?.trim() ?? "";
+  useEffect(() => {
+    if (!id) localStorage.setItem("editorDraft", text);
+  }, [id, text]);
+
+  // Preselect the last deck cards were added to, once decks have loaded.
+  useEffect(() => {
+    if (id || deck) return;
+    const last = localStorage.getItem("lastDeck");
+    if (last && decks.includes(last)) setDeck(last);
+  }, [id, deck, decks]);
+
+  const { front, back } = splitFrontBack(text);
 
   /** Wrap/unwrap markdown emphasis (Ctrl/Cmd+B, +I) — logic in markdown-edit.ts. */
   function toggleWrap(marker: "**" | "*") {
@@ -99,6 +110,7 @@ export default function Editor() {
   async function onSave() {
     if (!deck.trim() || !front || saving) return;
     setSaving(true);
+    localStorage.setItem("lastDeck", deck.trim());
     await saveCard({ id, deck: deck.trim(), front, back });
     if (id) {
       navigate(-1);
@@ -136,6 +148,7 @@ export default function Editor() {
         {[...new Set(deck && !decks.includes(deck) ? [...decks, deck] : decks)].map((d) => (
           <button
             key={d}
+            aria-pressed={deck === d}
             onClick={() => {
               setDeck(d);
               setNewDeckMode(false);
@@ -144,7 +157,7 @@ export default function Editor() {
               deck === d
                 ? "border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300"
                 : `border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300 ${
-                    deck ? "opacity-40 hover:opacity-100" : ""
+                    deck ? "opacity-60 hover:opacity-100" : ""
                   }`
             }`}
           >
@@ -176,7 +189,7 @@ export default function Editor() {
           <button
             onClick={() => setNewDeckMode(true)}
             className={`rounded-full border border-dashed border-zinc-300 px-3 py-1 text-xs text-zinc-400 transition hover:border-accent-400 hover:text-accent-500 dark:border-zinc-700 ${
-              deck ? "opacity-40 hover:opacity-100" : ""
+              deck ? "opacity-60 hover:opacity-100" : ""
             }`}
           >
             + new deck
@@ -185,7 +198,7 @@ export default function Editor() {
       </div>
 
       {needsDeck && (
-        <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+        <p role="status" className="text-xs font-medium text-amber-600 dark:text-amber-400">
           Pick a deck above — the card can't be saved without one.
         </p>
       )}
