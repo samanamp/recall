@@ -18,7 +18,9 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - run: npm ci
+      # npm install, not ci: macOS-generated lockfiles drift on wasm/platform
+      # optional deps (npm/cli#4828) and strict ci rejects them on linux.
+      - run: npm install --no-audit --no-fund
       - run: npm run build # tsc -b + vite build
       - run: npm test
 
@@ -34,6 +36,6 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: worker/package-lock.json
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
       - run: npx tsc --noEmit
       - run: npm test

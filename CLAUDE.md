@@ -90,6 +90,10 @@ mobile @2x DPR), WebP q0.8, content-hash dedupe. GIF/SVG pass through.
 - Tailwind v4 (CSS-first config): dark mode is class-based via
   `@custom-variant dark` in `index.css`; typography plugin's inline-code
   backticks are stripped there too.
+- CI uses `npm install`, NOT `npm ci`: macOS-generated lockfiles drift on
+  wasm/platform optional deps (`@rolldown/binding-wasm32-wasi` -> `@emnapi/*`,
+  npm/cli#4828) and strict `npm ci` rejects them on linux. Regenerating the
+  lockfile only holds until the next mac-side `npm install` — don't bother.
 - The PWA service worker (`vite-plugin-pwa`, autoUpdate) serves stale assets
   for one load after a deploy — always test on the *second* load.
 - Free-tier D1 is fast (~30-65ms) but GitHub API from the worker is 300ms+:
