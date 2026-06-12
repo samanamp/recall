@@ -122,7 +122,7 @@ export default function Review() {
         {undoStack.length > 0 && (
           <button
             onClick={() => void onUndo()}
-            className="mt-2 text-xs text-zinc-400 hover:text-sky-500"
+            className="mt-2 text-xs text-zinc-400 hover:text-accent-500"
           >
             ↩ undo last rating
           </button>
@@ -130,13 +130,13 @@ export default function Review() {
         {ahead.length > 0 && (
           <button
             onClick={() => void loadNext(ahead)}
-            className="mt-5 rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-colors hover:border-sky-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-sky-600"
+            className="mt-5 rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-colors hover:border-accent-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-accent-600"
           >
             Study ahead — {ahead.length} due in the next 7 days
           </button>
         )}
         <div>
-          <Link to="/" className="mt-4 inline-block text-sky-500">← Back to decks</Link>
+          <Link to="/" className="mt-4 inline-block text-accent-500">← Back to decks</Link>
         </div>
       </div>
     );
@@ -160,7 +160,7 @@ export default function Review() {
         </span>
         <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
           <div
-            className="h-full rounded-full bg-sky-500 transition-all duration-300"
+            className="h-full rounded-full bg-accent-500 transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -208,7 +208,7 @@ export default function Review() {
         {!revealed ? (
           <button
             onClick={() => setRevealed(true)}
-            className="h-12 w-full rounded-xl bg-sky-600 font-semibold text-white shadow-sm transition-colors hover:bg-sky-500"
+            className="h-12 w-full rounded-xl border border-accent-action-border bg-accent-action font-semibold text-accent-action-text shadow-sm transition-colors hover:bg-accent-action-hover"
           >
             Show answer
           </button>
@@ -231,13 +231,13 @@ export default function Review() {
         <div className="mt-2 text-center text-xs text-zinc-400">
           {undoStack.length > 0 && (
             <>
-              <button onClick={() => void onUndo()} className="hover:text-sky-500">
+              <button onClick={() => void onUndo()} className="hover:text-accent-500">
                 ↩ undo
               </button>
               {" · "}
             </>
           )}
-          <Link to={`/edit/${card.id}`} className="hover:text-sky-500">edit card</Link>
+          <Link to={`/edit/${card.id}`} className="hover:text-accent-500">edit card</Link>
           <span className="hidden sm:inline"> · space reveal · 1–4 rate · z undo</span>
         </div>
       </div>

@@ -5,7 +5,15 @@ import { db, kvGet, kvSet } from "../lib/db";
 import { optimizeParameters } from "../lib/optimize";
 import { configureScheduler } from "../lib/scheduler";
 import { requestSync, syncAll, type SyncResult } from "../lib/sync";
-import { getTheme, setTheme, type Theme } from "../lib/theme";
+import {
+  COLOR_THEMES,
+  getColorTheme,
+  getTheme,
+  setColorTheme,
+  setTheme,
+  type ColorTheme,
+  type Theme,
+} from "../lib/theme";
 
 const OPTIMIZE_MIN_REVIEWS = 100;
 
@@ -13,6 +21,7 @@ export default function Settings() {
   const [workerUrl, setWorkerUrl] = useState("");
   const [appToken, setAppToken] = useState("");
   const [theme, setThemeState] = useState<Theme>(getTheme());
+  const [colorTheme, setColorThemeState] = useState<ColorTheme>(getColorTheme());
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [retention, setRetention] = useState(0.9);
@@ -147,10 +156,10 @@ export default function Settings() {
   }
 
   const input =
-    "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70";
+    "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-accent-500 dark:border-zinc-800 dark:bg-zinc-900/70";
   const label = "mb-1 block text-xs font-medium text-zinc-500";
   const secondary =
-    "rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:border-sky-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-sky-600";
+    "rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:border-accent-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-accent-600";
 
   return (
     <div className="max-w-md space-y-10">
@@ -184,7 +193,7 @@ export default function Settings() {
           <button
             onClick={() => void onSync()}
             disabled={syncing || !workerUrl.trim() || !appToken.trim()}
-            className="w-full rounded-xl bg-sky-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 disabled:opacity-40"
+            className="w-full rounded-xl border border-accent-action-border bg-accent-action py-2.5 text-sm font-semibold text-accent-action-text shadow-sm transition-colors hover:bg-accent-action-hover disabled:opacity-40"
           >
             {syncing ? "Syncing…" : "Sync now"}
           </button>
@@ -218,7 +227,7 @@ export default function Settings() {
               step={0.01}
               value={retention}
               onChange={(e) => onRetentionChange(Number(e.target.value))}
-              className="w-full accent-sky-500"
+              className="w-full accent-accent-500"
             />
             <div className="flex justify-between text-[11px] text-zinc-400">
               <span>fewer reviews</span>
@@ -240,7 +249,7 @@ export default function Settings() {
                 setNewPerDay(v);
                 void kvSet("newPerDay", v);
               }}
-              className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70"
+              className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm shadow-sm outline-none focus:border-accent-500 dark:border-zinc-800 dark:bg-zinc-900/70"
             />
             <p className="mt-1 text-xs text-zinc-500">
               Caps daily introductions — every new card becomes reviews due within days.
@@ -251,7 +260,7 @@ export default function Settings() {
             <button
               onClick={() => void onOptimize()}
               disabled={optimizing || reviewCount < OPTIMIZE_MIN_REVIEWS}
-              className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 text-sm font-semibold shadow-sm transition-colors hover:border-sky-400 disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-sky-600"
+              className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 text-sm font-semibold shadow-sm transition-colors hover:border-accent-400 disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-accent-600"
             >
               {optimizing
                 ? "Optimizing…"
@@ -276,7 +285,8 @@ export default function Settings() {
       </section>
 
       <section>
-        <h2 className="mb-3 font-semibold">Appearance</h2>
+        <h2 className="mb-1 font-semibold">Appearance</h2>
+        <p className="mb-3 text-sm text-zinc-500">Choose the interface mode and accent color.</p>
         <div className="inline-flex rounded-xl bg-zinc-200/70 p-1 dark:bg-zinc-800/80">
           {(["system", "dark", "light"] as const).map((t) => (
             <button
@@ -292,6 +302,33 @@ export default function Settings() {
               }`}
             >
               {t}
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {COLOR_THEMES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={colorTheme === option.id}
+              onClick={() => {
+                setColorTheme(option.id);
+                setColorThemeState(option.id);
+              }}
+              className={`flex min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors sm:flex-col sm:items-start ${
+                colorTheme === option.id
+                  ? "border-accent-500 bg-accent-500/10"
+                  : "border-zinc-200 bg-white hover:border-accent-400 dark:border-zinc-800 dark:bg-zinc-900/70"
+              }`}
+            >
+              <span
+                className="size-4 shrink-0 rounded-full shadow-sm ring-1 ring-black/10"
+                style={{ backgroundColor: option.swatch }}
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{option.label}</span>
+                <span className="block truncate text-[11px] text-zinc-500">{option.description}</span>
+              </span>
             </button>
           ))}
         </div>

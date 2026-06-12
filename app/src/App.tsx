@@ -25,7 +25,7 @@ export default function App() {
   const tab = ({ isActive }: { isActive: boolean }) =>
     `flex-1 py-3 text-center text-sm font-medium transition-colors sm:flex-none sm:rounded-full sm:px-3.5 sm:py-1.5 ${
       isActive
-        ? "text-sky-600 dark:text-sky-400 sm:bg-sky-500/10"
+        ? "text-accent-600 dark:text-accent-400 sm:bg-accent-500/10"
         : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
     }`;
 
@@ -34,7 +34,7 @@ export default function App() {
       <header className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50/90 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/90">
         <div className="mx-auto flex max-w-3xl lg:max-w-4xl items-center gap-2 px-4 py-2">
           <NavLink to="/" className="text-lg font-bold tracking-tight">
-            re<span className="text-sky-500">call</span>
+            re<span className="text-accent-500">call</span>
           </NavLink>
           {/* desktop nav */}
           <nav className="ml-4 hidden gap-1 sm:flex">
@@ -51,7 +51,7 @@ export default function App() {
             className={`ml-auto flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium shadow-sm transition-colors ${
               failed
                 ? "border-red-300 bg-red-50 text-red-600 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400"
-                : "border-zinc-200 bg-white text-zinc-600 hover:border-sky-400 hover:text-sky-600 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:border-sky-600 dark:hover:text-sky-400"
+                : "border-zinc-200 bg-white text-zinc-600 hover:border-accent-400 hover:text-accent-600 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:border-accent-600 dark:hover:text-accent-400"
             }`}
           >
             <svg

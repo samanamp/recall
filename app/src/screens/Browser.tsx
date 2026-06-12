@@ -52,7 +52,7 @@ export default function Browser() {
   const chip = (active: boolean) =>
     `flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
       active
-        ? "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+        ? "border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300"
         : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300"
     }`;
 
@@ -62,7 +62,7 @@ export default function Browser() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search cards…"
-        className="mb-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-900/70"
+        className="mb-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-accent-500 dark:border-zinc-800 dark:bg-zinc-900/70"
       />
 
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
@@ -112,7 +112,7 @@ export default function Browser() {
 function DueBadge({ due }: { due: number | null }) {
   if (due === null) {
     return (
-      <span className="shrink-0 rounded-full bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-600 dark:text-sky-400">
+      <span className="shrink-0 rounded-full bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-600 dark:text-accent-400">
         new
       </span>
     );

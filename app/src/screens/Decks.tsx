@@ -64,7 +64,7 @@ export default function Decks() {
         e.preventDefault();
         void onCreate();
       }}
-      className="flex items-center gap-2 rounded-2xl border border-sky-500/50 bg-white p-3 shadow-sm dark:bg-zinc-900/70"
+      className="flex items-center gap-2 rounded-2xl border border-accent-500/50 bg-white p-3 shadow-sm dark:bg-zinc-900/70"
     >
       <input
         autoFocus
@@ -77,7 +77,7 @@ export default function Decks() {
       <button
         type="submit"
         disabled={!name.trim()}
-        className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-40"
+        className="rounded-lg border border-accent-action-border bg-accent-action px-3 py-1.5 text-sm font-medium text-accent-action-text hover:bg-accent-action-hover disabled:opacity-40"
       >
         Create
       </button>
@@ -92,7 +92,7 @@ export default function Decks() {
   ) : (
     <button
       onClick={() => setAdding(true)}
-      className="flex min-h-[5.5rem] items-center justify-center rounded-2xl border border-dashed border-zinc-300 text-sm font-medium text-zinc-400 transition-colors hover:border-sky-400 hover:text-sky-500 dark:border-zinc-700"
+      className="flex min-h-[5.5rem] items-center justify-center rounded-2xl border border-dashed border-zinc-300 text-sm font-medium text-zinc-400 transition-colors hover:border-accent-400 hover:text-accent-500 dark:border-zinc-700"
     >
       + New deck
     </button>
@@ -110,10 +110,10 @@ export default function Decks() {
         {totalDue + totalNew > 0 ? (
           <Link
             to="/review"
-            className="flex items-center gap-2 rounded-full bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500"
+            className="flex items-center gap-2 rounded-full border border-accent-action-border bg-accent-action px-4 py-1.5 text-sm font-semibold text-accent-action-text shadow-sm transition-colors hover:bg-accent-action-hover"
           >
             Study all
-            <span className="text-xs font-medium text-sky-200 tabular-nums">
+            <span className="text-xs font-medium text-accent-200 tabular-nums">
               {totalDue > 0 && `${totalDue} due`}
               {totalDue > 0 && totalNew > 0 && " · "}
               {totalNew > 0 && `${totalNew} new`}
@@ -128,11 +128,11 @@ export default function Decks() {
         <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-8 text-center text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
           <p className="text-3xl">🗂️</p>
           <p className="mt-3">No decks yet — create one below, then{" "}
-            <Link to="/new" className="font-medium text-sky-500">add a card</Link>.
+            <Link to="/new" className="font-medium text-accent-500">add a card</Link>.
           </p>
           <p className="mt-2 text-xs">
             Have existing cards? Configure sync in{" "}
-            <Link to="/settings" className="text-sky-500">Settings</Link>.
+            <Link to="/settings" className="text-accent-500">Settings</Link>.
           </p>
         </div>
       )}
@@ -142,7 +142,7 @@ export default function Decks() {
           <Link
             key={deck.name}
             to={`/review/${encodeURIComponent(deck.name)}`}
-            className="group flex flex-col justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:border-sky-400 hover:shadow-md dark:border-zinc-700/60 dark:bg-zinc-900 dark:hover:border-sky-600"
+            className="group flex flex-col justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:border-accent-400 hover:shadow-md dark:border-zinc-700/60 dark:bg-zinc-900 dark:hover:border-accent-600"
           >
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 font-semibold">
@@ -169,7 +169,7 @@ export default function Decks() {
                 </span>
               )}
               {deck.newCards > 0 && (
-                <span className="rounded-full bg-sky-500/10 px-2 py-0.5 font-medium text-sky-600 dark:text-sky-400">
+                <span className="rounded-full bg-accent-500/10 px-2 py-0.5 font-medium text-accent-600 dark:text-accent-400">
                   {deck.newCards} new
                 </span>
               )}

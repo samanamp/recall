@@ -9,6 +9,84 @@
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace;
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent-900: var(--accent-900);
+  --color-accent-action: var(--accent-action);
+  --color-accent-action-hover: var(--accent-action-hover);
+  --color-accent-action-text: var(--accent-action-text);
+  --color-accent-action-border: var(--accent-action-border);
+}
+
+:root,
+[data-accent-theme="sky"] {
+  --accent-200: #bae6fd;
+  --accent-300: #7dd3fc;
+  --accent-400: #38bdf8;
+  --accent-500: #0ea5e9;
+  --accent-600: #0284c7;
+  --accent-700: #0369a1;
+  --accent-900: #0c4a6e;
+  --accent-action: #082f49;
+  --accent-action-hover: #0c4a6e;
+  --accent-action-text: #bae6fd;
+  --accent-action-border: #0369a1;
+}
+[data-accent-theme="terminal"] {
+  --accent-200: #8affb5;
+  --accent-300: #4dff91;
+  --accent-400: #00ff73;
+  --accent-500: #00e676;
+  --accent-600: #00c853;
+  --accent-700: #009624;
+  --accent-900: #004d1a;
+  --accent-action: #062b16;
+  --accent-action-hover: #0a3b1f;
+  --accent-action-text: #8affb5;
+  --accent-action-border: #007a33;
+}
+[data-accent-theme="amber"] {
+  --accent-200: #fde68a;
+  --accent-300: #fcd34d;
+  --accent-400: #fbbf24;
+  --accent-500: #f59e0b;
+  --accent-600: #d97706;
+  --accent-700: #b45309;
+  --accent-900: #78350f;
+  --accent-action: #3b2505;
+  --accent-action-hover: #573608;
+  --accent-action-text: #fde68a;
+  --accent-action-border: #92400e;
+}
+[data-accent-theme="violet"] {
+  --accent-200: #ddd6fe;
+  --accent-300: #c4b5fd;
+  --accent-400: #a78bfa;
+  --accent-500: #8b5cf6;
+  --accent-600: #7c3aed;
+  --accent-700: #6d28d9;
+  --accent-900: #4c1d95;
+  --accent-action: #2e1065;
+  --accent-action-hover: #3b147f;
+  --accent-action-text: #ddd6fe;
+  --accent-action-border: #6d28d9;
+}
+[data-accent-theme="rose"] {
+  --accent-200: #fecdd3;
+  --accent-300: #fda4af;
+  --accent-400: #fb7185;
+  --accent-500: #f43f5e;
+  --accent-600: #e11d48;
+  --accent-700: #be123c;
+  --accent-900: #881337;
+  --accent-action: #4c0519;
+  --accent-action-hover: #68091f;
+  --accent-action-text: #fecdd3;
+  --accent-action-border: #9f1239;
 }
 
 body {
@@ -50,7 +128,7 @@ html {
 
 /* Replace the browser's default white focus box with a brand ring. */
 :focus-visible {
-  outline: 2px solid rgb(14 165 233 / 0.7);
+  outline: 2px solid color-mix(in srgb, var(--accent-500) 70%, transparent);
   outline-offset: 2px;
   border-radius: 2px;
 }

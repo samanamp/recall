@@ -114,7 +114,7 @@ export default function Stats() {
                 <span className="w-24 shrink-0 text-zinc-500">{relDay(f.day, today)}</span>
                 <div className="h-4 flex-1 overflow-hidden rounded bg-zinc-100 dark:bg-zinc-800/60">
                   <div
-                    className="h-full rounded bg-sky-500/70"
+                    className="h-full rounded bg-accent-500/70"
                     style={{ width: `${(f.n / maxForecast) * 100}%` }}
                   />
                 </div>
@@ -147,7 +147,7 @@ function StatCard({
       <div className="text-xs font-medium text-zinc-500">{label}</div>
       <div
         className={`mt-1 text-2xl font-bold tabular-nums ${
-          accent ? "text-sky-600 dark:text-sky-400" : ""
+          accent ? "text-accent-600 dark:text-accent-400" : ""
         }`}
       >
         {value}
@@ -158,10 +158,10 @@ function StatCard({
 
 function heatClass(n: number): string {
   if (n === 0) return "bg-zinc-100 dark:bg-zinc-800/60";
-  if (n < 5) return "bg-sky-200 dark:bg-sky-900";
-  if (n < 15) return "bg-sky-400 dark:bg-sky-700";
-  if (n < 40) return "bg-sky-500 dark:bg-sky-500";
-  return "bg-sky-600 dark:bg-sky-400";
+  if (n < 5) return "bg-accent-200 dark:bg-accent-900";
+  if (n < 15) return "bg-accent-400 dark:bg-accent-700";
+  if (n < 40) return "bg-accent-500 dark:bg-accent-500";
+  return "bg-accent-600 dark:bg-accent-400";
 }
 
 function localISO(d: Date): string {
