@@ -112,6 +112,7 @@ export default function Editor() {
   }
 
   const valid = deck.trim() !== "" && front !== "";
+  const needsDeck = deck.trim() === "" && text.trim() !== "";
 
   return (
     <div className="flex flex-col gap-3">
@@ -120,8 +121,10 @@ export default function Editor() {
         <button
           onClick={() => void onSave()}
           disabled={(!valid || saving) && !justAdded}
-          className={`ml-auto rounded-xl px-5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-40 ${
-            justAdded ? "bg-emerald-600" : "bg-sky-600 hover:bg-sky-500"
+          className={`ml-auto rounded-xl px-5 py-1.5 text-sm font-semibold shadow-sm transition-colors disabled:opacity-40 ${
+            justAdded
+              ? "bg-emerald-600 text-white"
+              : "border border-accent-action-border bg-accent-action text-accent-action-text hover:bg-accent-action-hover"
           }`}
         >
           {justAdded ? "Added ✓" : id ? "Save" : "Add card"}
@@ -137,10 +140,12 @@ export default function Editor() {
               setDeck(d);
               setNewDeckMode(false);
             }}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
               deck === d
-                ? "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300"
-                : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300"
+                ? "border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300"
+                : `border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300 ${
+                    deck ? "opacity-40 hover:opacity-100" : ""
+                  }`
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: deckColor(d) }} />
@@ -164,18 +169,26 @@ export default function Editor() {
               onKeyDown={(e) => e.key === "Escape" && setNewDeckMode(false)}
               onBlur={() => setNewDeckMode(false)}
               placeholder="deck name ⏎"
-              className="w-32 rounded-full border border-sky-500 bg-white px-3 py-1 text-xs outline-none dark:bg-zinc-900"
+              className="w-32 rounded-full border border-accent-500 bg-white px-3 py-1 text-xs outline-none dark:bg-zinc-900"
             />
           </form>
         ) : (
           <button
             onClick={() => setNewDeckMode(true)}
-            className="rounded-full border border-dashed border-zinc-300 px-3 py-1 text-xs text-zinc-400 transition-colors hover:border-sky-400 hover:text-sky-500 dark:border-zinc-700"
+            className={`rounded-full border border-dashed border-zinc-300 px-3 py-1 text-xs text-zinc-400 transition hover:border-accent-400 hover:text-accent-500 dark:border-zinc-700 ${
+              deck ? "opacity-40 hover:opacity-100" : ""
+            }`}
           >
             + new deck
           </button>
         )}
       </div>
+
+      {needsDeck && (
+        <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+          Pick a deck above — the card can't be saved without one.
+        </p>
+      )}
 
       {/* mobile: write/preview tabs */}
       <div className="flex gap-1 sm:hidden">
@@ -218,9 +231,9 @@ export default function Editor() {
             "Front of the card (markdown, $math$, ```code```)…\n---\nBack of the card. Paste or drop images directly."
           }
           spellCheck={false}
-          className={`min-h-[50dvh] w-full resize-y rounded-xl border bg-white p-3 font-mono text-sm shadow-sm outline-none focus:border-sky-500 dark:bg-zinc-900/70 ${
+          className={`min-h-[50dvh] w-full resize-y rounded-xl border bg-white p-3 font-mono text-sm shadow-sm outline-none focus:border-accent-500 dark:bg-zinc-900/70 ${
             dragging
-              ? "border-sky-500 ring-2 ring-sky-500/30"
+              ? "border-accent-500 ring-2 ring-accent-500/30"
               : "border-zinc-200 dark:border-zinc-800"
           } ${mobileTab === "preview" ? "hidden sm:block" : ""}`}
         />
