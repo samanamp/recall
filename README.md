@@ -1,81 +1,108 @@
 # recall
 
-Markdown flashcards with FSRS spaced repetition. Cards live as plain `.md` files
-in your own GitHub repo; review history lives in Cloudflare D1. Dark mode, code
-highlighting, KaTeX math, image paste. Works on phone and desktop as a PWA.
-**$0/month.** See [SPEC.md](SPEC.md) for the design.
+**Your flashcards as markdown, in your own git repo. Free forever.**
+
+recall is a spaced-repetition app (think Anki) where every card is a plain
+`.md` file in a GitHub repo **you** own, scheduling runs on
+[FSRS](https://github.com/open-spaced-repetition/ts-fsrs), and the whole thing
+deploys to Cloudflare's free tier in about five minutes. No accounts, no
+servers to babysit, no subscription — **$0/month**, by design.
+
+<!-- screenshot: drop app/docs/screenshot.png here -->
+
+## Why
+
+- **Own your data.** Cards are markdown files (`decks/<deck>/<id>.md`) in your
+  repo — readable on GitHub, greppable, diffable, yours in 30 years.
+- **Real spaced repetition.** FSRS scheduling with on-device parameter
+  optimization from your own review history — the same algorithm modern Anki
+  uses, not SM-2.
+- **Writes like a text editor.** Markdown with code highlighting, KaTeX math,
+  and paste-an-image support (auto-optimized to WebP). Front, `---`, back:
+
+  ```markdown
+  What does `Box<T>` do in Rust?
+  ---
+  Heap-allocates `T`.
+  ```
+
+- **Local-first PWA.** Everything is instant from IndexedDB and works fully
+  offline — on the subway, on a plane. Reviews queue and sync when you're back.
+- **Multi-device that converges.** The review log is the source of truth;
+  the worker replays it deterministically, so offline reviews on two devices
+  merge instead of conflicting.
+- **No telemetry, no account, no middleman.** Your GitHub token never leaves
+  your Cloudflare worker. One bearer token connects your devices.
+
+## Setup (~5 minutes)
+
+You need: a free [Cloudflare account](https://dash.cloudflare.com/sign-up), a
+GitHub repo for your cards (private recommended, e.g. `yourname/recall-decks`),
+and a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new)
+scoped to **only that repo** with **Contents: Read and write**.
+
+```bash
+git clone https://github.com/samanamp/recall   # or clone your fork (see Updating)
+cd recall
+node tools/setup.mjs
+```
+
+The wizard logs into Cloudflare, creates the D1 database, writes the config,
+sets your secrets, builds, and deploys. It prints your personal app URL —
+open it on each device, paste your app token in **Settings**, and hit
+**Sync now**. On a phone, "Add to Home Screen" installs it as an app. A
+welcome deck walks you through the rest.
+
+## Updating
+
+Easiest: **fork this repo** instead of cloning it directly, then add your
+Cloudflare credentials to the fork (see
+[.github/workflows/deploy.yml](.github/workflows/deploy.yml) for the four
+values). After that, updating is one click — **Sync fork** on GitHub — and
+the Action rebuilds and redeploys automatically.
+
+Without the Action: `git pull && node tools/setup.mjs` (re-running is safe).
+
+## Free-tier limits, honestly
+
+Everything runs inside Cloudflare's and GitHub's free tiers. For one person —
+even a heavy, 200-reviews-a-day person — you will not get anywhere near the
+limits (100k worker requests/day, 100k DB writes/day, 5M reads/day). The
+sync is designed around them: steady state is a single ~100ms round trip.
+Sharing one deployment with a handful of family members is fine; running a
+public service off one free account is not what this is for.
+
+## Architecture
 
 ```
 app/     — React PWA (Vite + TS + Tailwind + Dexie + ts-fsrs)
-worker/  — Cloudflare Worker API (Hono + D1 + GitHub proxy)
+worker/  — Cloudflare Worker: serves the app (static assets) + API at /api
+           (Hono + D1 + GitHub proxy)
+tools/   — setup wizard, maintenance scripts
 ```
-
-## Setup (one time, ~15 minutes)
-
-### 1. Create your cards repo
-
-Create a **private GitHub repo** (e.g. `recall-decks`). Cards will appear as
-`decks/<deck>/<id>-<slug>.md`. You can also hand-write cards there:
-
-```markdown
-What does `Box<T>` do in Rust?
----
-Heap-allocates `T`.
-```
-
-(Frontmatter with a stable `id` is added automatically on first sync.)
-
-### 2. Create a GitHub token
-
-GitHub → Settings → Developer settings → **Fine-grained personal access token**:
-- Repository access: **only** your cards repo
-- Permissions: **Contents → Read and write**
-
-### 3. Deploy the worker
-
-```bash
-cd worker
-npm install
-npx wrangler login                       # free Cloudflare account
-npx wrangler d1 create mdanki            # paste the printed database_id into wrangler.toml
-# also set GITHUB_REPO = "samanamp/recall-decks" in wrangler.toml
-npx wrangler d1 migrations apply mdanki --remote
-npx wrangler secret put GITHUB_TOKEN     # the PAT from step 2
-npx wrangler secret put APP_TOKEN        # invent a long random string, e.g. `openssl rand -hex 32`
-npx wrangler deploy                      # note the printed workers.dev URL
-```
-
-### 4. Deploy the app
-
-```bash
-cd app
-npm install
-npm run build
-npx wrangler pages deploy dist --project-name recall
-```
-
-(Or connect the repo to Cloudflare Pages for auto-deploys: build command
-`npm run build`, output `dist`, root directory `app`.)
-
-### 5. Connect your devices
-
-Open the Pages URL on each device → **Settings** → enter the worker URL and your
-`APP_TOKEN` → Save → Sync now. On your phone, use "Add to Home Screen" to
-install it as an app.
-
-## Development
-
-```bash
-cd app && npm run dev        # frontend at localhost:5173
-cd worker && npx wrangler dev  # worker at localhost:8787 (uses local D1)
-```
-
-## How sync works
 
 - **Cards/media:** the app keeps a local copy in IndexedDB and pushes edits as
   git commits via the worker (your GitHub token never leaves Cloudflare).
   Pulls diff the repo tree against local blob SHAs.
 - **Reviews:** each rating is scheduled locally with `ts-fsrs` immediately and
-  queued; the worker stores the append-only log in D1 and derives canonical FSRS
-  state by replaying each card's log, which devices adopt on next sync.
+  queued; the worker stores the append-only log in D1 and derives canonical
+  FSRS state by replaying each card's log, which devices adopt on next sync.
 - Everything works offline; queues drain on reconnect.
+
+See [SPEC.md](SPEC.md) for the original design document.
+
+## Development
+
+```bash
+cd worker && cp wrangler.example.toml wrangler.toml  # fill in placeholders
+cd worker && npx wrangler dev    # API + local D1 at localhost:8787
+cd app && npm run dev            # app at localhost:5173, /api proxied to 8787
+```
+
+Tests: `npx vitest run` in `app/` (card format, scheduler, optimizer data
+prep) and `worker/` (replay determinism/convergence). CI runs both plus
+typechecks on every push.
+
+## License
+
+[MIT](LICENSE)

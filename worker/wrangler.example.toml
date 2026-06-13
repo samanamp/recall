@@ -1,0 +1,29 @@
+# Copy to wrangler.toml (or let tools/setup.mjs generate it) and fill in the
+# __PLACEHOLDERS__. wrangler.toml is gitignored — your values stay local.
+
+name = "recall"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+# The worker serves the built PWA too — one deploy, one URL, no CORS.
+# Build the app first: cd ../app && npm run build
+[assets]
+directory = "../app/dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# Create the database with:  npx wrangler d1 create recall
+# then paste the database_id it prints below.
+[[d1_databases]]
+binding = "DB"
+database_name = "recall"
+database_id = "__DATABASE_ID__"
+
+[vars]
+# The GitHub repo that holds your cards, e.g. "yourname/recall-decks"
+GITHUB_REPO = "__CARDS_REPO__"
+GITHUB_BRANCH = "__CARDS_BRANCH__"
+
+# Secrets (set with `npx wrangler secret put <NAME>`):
+#   APP_TOKEN     - shared secret your devices use to talk to this worker
+#   GITHUB_TOKEN  - fine-grained PAT, contents read/write on GITHUB_REPO only

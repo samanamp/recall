@@ -117,6 +117,10 @@ export async function syncAll(): Promise<SyncResult> {
     syncing = false;
     setStatus({ syncing: false, last: result });
   }
+  // After the first successful sync we know whether the collection is truly
+  // empty — seed the welcome deck if so. Dynamic import: actions.ts imports
+  // this module, so a static import here would be a cycle.
+  if (result.ok) void import("./welcome").then((m) => m.maybeSeedWelcome());
   return result;
 }
 

@@ -3,3 +3,7 @@ dist/
 .wrangler/
 *.log
 .DS_Store
+
+# per-deployment config — copy from wrangler.example.toml / .env.example
+worker/wrangler.toml
+app/.env

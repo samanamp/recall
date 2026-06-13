@@ -8,16 +8,20 @@ design; this file is the living knowledge that isn't obvious from the code.
 
 | Piece | Where | Deploy command |
 |---|---|---|
-| App (PWA) | https://recall-3c5.pages.dev (CF Pages project `recall`) | `cd app && npm run build && npx wrangler pages deploy dist --project-name recall` |
-| API | https://recall-api.info-d80.workers.dev (worker `recall-api`) | `cd worker && npx wrangler deploy` |
+| App + API | https://recall-api.info-d80.workers.dev (worker `recall-api` serves the PWA via static assets; API under `/api`, legacy root paths kept) | `cd app && npm run build && cd ../worker && npx wrangler deploy` |
+| App (legacy) | https://recall-3c5.pages.dev (CF Pages project `recall`, pre-merge; still works cross-origin) | `cd app && npm run build && npx wrangler pages deploy dist --project-name recall` |
 | DB | Cloudflare D1, name `mdanki` (pre-rename, kept) | `npx wrangler d1 migrations apply mdanki --remote` |
 | Cards | github.com/samanamp/recall-decks (private) | written via worker only |
 | Code | github.com/samanamp/recall (public) | `git push` |
 
 Worker secrets (via `wrangler secret put`): `APP_TOKEN` (device bearer token),
 `GITHUB_TOKEN` (fine-grained PAT, contents r/w on recall-decks only — never
-ships to devices). The default worker URL is baked into `app/.env`
-(`VITE_WORKER_URL`); the user enters only the token per device.
+ships to devices). `worker/wrangler.toml` and `app/.env` are **gitignored**
+(real values live only on this machine; templates are `wrangler.example.toml`
+/ `.env.example` — keep placeholders `__DATABASE_ID__` etc. intact, the setup
+wizard and deploy.yml substitute them). Empty worker URL in the app = same
+origin. OSS deployers run `node tools/setup.mjs`; forks auto-deploy via
+`.github/workflows/deploy.yml`.
 
 ## Architecture invariants — break these and sync corrupts
 

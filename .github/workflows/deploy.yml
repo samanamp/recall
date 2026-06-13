@@ -1,0 +1,58 @@
+# Fork-deploy: run `node tools/setup.mjs` once locally, then configure your
+# fork so every "Sync fork" (or push to main) redeploys automatically:
+#
+#   Settings → Secrets and variables → Actions
+#     Secrets:   CLOUDFLARE_API_TOKEN   (Workers Scripts:Edit + D1:Edit)
+#                CLOUDFLARE_ACCOUNT_ID
+#     Variables: D1_DATABASE_ID         (from `npx wrangler d1 list`)
+#                CARDS_REPO             (e.g. yourname/recall-decks)
+#                CARDS_BRANCH           (optional, default main)
+#                D1_DATABASE_NAME       (optional, default recall)
+#
+# APP_TOKEN / GITHUB_TOKEN worker secrets persist across deploys — set once
+# by the setup script, never needed here. The job skips silently until the
+# variables above are configured.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ vars.D1_DATABASE_ID != '' }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Generate wrangler.toml from example
+        run: |
+          sed -e "s|__DATABASE_ID__|${{ vars.D1_DATABASE_ID }}|" \
+              -e "s|__CARDS_REPO__|${{ vars.CARDS_REPO }}|" \
+              -e "s|__CARDS_BRANCH__|${{ vars.CARDS_BRANCH || 'main' }}|" \
+              -e "s|database_name = \"recall\"|database_name = \"${{ vars.D1_DATABASE_NAME || 'recall' }}\"|" \
+              worker/wrangler.example.toml > worker/wrangler.toml
+
+      # npm install, not ci — see ci.yml for the lockfile-drift story.
+      - name: Build app
+        working-directory: app
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Apply D1 migrations
+        working-directory: worker
+        run: |
+          npm install --no-audit --no-fund
+          npx wrangler d1 migrations apply "${{ vars.D1_DATABASE_NAME || 'recall' }}" --remote
+
+      - name: Deploy worker (app + API)
+        working-directory: worker
+        run: npx wrangler deploy
