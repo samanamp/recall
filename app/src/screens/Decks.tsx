@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { createDeck, deleteDeck } from "../lib/actions";
-import { db } from "../lib/db";
+import { db, kvGet } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
 import { deckCounts, newBudget } from "../lib/scheduler";
 
@@ -26,6 +26,13 @@ export default function Decks() {
     }
     await deleteDeck(deck);
   }
+
+  // Default true so configured devices never flash the connect banner.
+  const configured = useLiveQuery(
+    async () => Boolean(await kvGet<string>("appToken")),
+    [],
+    true
+  );
 
   const decks = useLiveQuery(async () => {
     const now = new Date();
@@ -124,17 +131,34 @@ export default function Decks() {
         )}
       </div>
 
-      {decks.list.length === 0 && (
-        <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-8 text-center text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
-          <p className="text-3xl">🗂️</p>
-          <p className="mt-3">No decks yet — create one below, then{" "}
-            <Link to="/new" className="font-medium text-accent-500">add a card</Link>.
+      {!configured ? (
+        <div className="mb-6 rounded-2xl border border-accent-500/40 bg-white p-8 text-center shadow-sm dark:border-accent-500/30 dark:bg-zinc-900/70">
+          <p className="text-3xl">👋</p>
+          <p className="mt-3 font-semibold">Connect this device</p>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-zinc-500">
+            Paste the app token from setup into Settings and hit Sync. Your cards — or a
+            welcome deck, if this is a fresh start — appear right after.
           </p>
-          <p className="mt-2 text-xs">
-            Have existing cards? Configure sync in{" "}
-            <Link to="/settings" className="text-accent-500">Settings</Link>.
-          </p>
+          <Link
+            to="/settings"
+            className="mt-4 inline-block rounded-xl border border-accent-action-border bg-accent-action px-5 py-2 text-sm font-semibold text-accent-action-text shadow-sm transition-colors hover:bg-accent-action-hover"
+          >
+            Open Settings
+          </Link>
         </div>
+      ) : (
+        decks.list.length === 0 && (
+          <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-8 text-center text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
+            <p className="text-3xl">🗂️</p>
+            <p className="mt-3">No decks yet — create one below, then{" "}
+              <Link to="/new" className="font-medium text-accent-500">add a card</Link>.
+            </p>
+            <p className="mt-2 text-xs">
+              Have existing cards? Configure sync in{" "}
+              <Link to="/settings" className="text-accent-500">Settings</Link>.
+            </p>
+          </div>
+        )
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
