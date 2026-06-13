@@ -43,8 +43,12 @@ GitHub repo for your cards (private recommended, e.g. `yourname/recall-decks`),
 and a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new)
 scoped to **only that repo** with **Contents: Read and write**.
 
+**[Fork this repo first](https://github.com/samanamp/recall/fork)** (not "Use this
+template" — a template is a clean copy with no link back here, so it can never
+pull updates; a fork can). Then clone *your* fork and run the wizard:
+
 ```bash
-git clone https://github.com/samanamp/recall   # or clone your fork (see Updating)
+git clone https://github.com/<you>/recall
 cd recall
 node tools/setup.mjs
 ```
@@ -57,13 +61,30 @@ welcome deck walks you through the rest.
 
 ## Updating
 
-Easiest: **fork this repo** instead of cloning it directly, then add your
-Cloudflare credentials to the fork (see
-[.github/workflows/deploy.yml](.github/workflows/deploy.yml) for the four
-values). After that, updating is one click — **Sync fork** on GitHub — and
-the Action rebuilds and redeploys automatically.
+Because you forked, new work here flows to you. Turn on hands-off auto-deploy once:
 
-Without the Action: `git pull && node tools/setup.mjs` (re-running is safe).
+1. On your fork: **Actions** tab → enable workflows (forks start with Actions
+   off — this also gates the weekly schedule).
+2. **Settings → Secrets and variables → Actions** → add the Cloudflare
+   credentials and your D1 id. The exact list is at the top of
+   [.github/workflows/deploy.yml](.github/workflows/deploy.yml). Your
+   `APP_TOKEN` / `GITHUB_TOKEN` are worker secrets set by `setup.mjs` and
+   persist across deploys, so they're never stored in GitHub.
+
+After that, the deploy workflow runs three ways:
+
+- **Weekly schedule** — fast-forwards your fork from upstream and redeploys.
+  Fully automatic; nothing to click. *(GitHub auto-pauses scheduled workflows
+  on a fork after 60 days of no activity — you'll get an email, one click
+  resumes.)*
+- **Sync fork** — the button on your fork's homepage, whenever you want updates
+  now instead of waiting for Monday.
+- **Run workflow** — the manual button on the Actions → Deploy page.
+
+Prefer to stay in control? Skip the Actions setup and update by hand with
+`git pull upstream main && node tools/setup.mjs` (re-running is safe). Keep any
+local customizations on a branch — the scheduled sync is fast-forward-only, so
+it won't touch your fork if `main` has diverged (it deploys your code as-is).
 
 ## Free-tier limits, honestly
 
