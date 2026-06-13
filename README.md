@@ -1,51 +1,58 @@
 # recall
 
-**Your flashcards as markdown, in your own git repo. Free forever.**
+### Spaced-repetition flashcards as plain markdown. Beautiful, offline, and $0/month.
 
-recall is a spaced-repetition app (think Anki) where every card is a plain
-`.md` file in a GitHub repo **you** own, scheduling runs on
-[FSRS](https://github.com/open-spaced-repetition/ts-fsrs), and the whole thing
-deploys to Cloudflare's free tier in about five minutes. No accounts, no
-servers to babysit, no subscription — **$0/month**, by design.
+Like Anki — but cards are `.md` files you write in seconds, the scheduler
+([FSRS](https://github.com/open-spaced-repetition/ts-fsrs)) means you review
+less to remember the same, and you run your own copy on Cloudflare's free tier.
+No account. No subscription. Nothing to babysit.
 
 ![recall — add a card, review with FSRS, browse, stats, and themes](docs/demo.gif)
 
-<sub>▶ [Full-quality video](docs/demo.mp4) · the tour adds a card, reviews with grading, searches, shows 90 days of stats, and switches accent/light-dark themes.</sub>
+<sub>▶ [Watch the full-quality video](docs/demo.mp4)</sub>
 
-## Why
+## Why you'll keep using it
 
-- **Own your data.** Cards are markdown files (`decks/<deck>/<id>.md`) in your
-  repo — readable on GitHub, greppable, diffable, yours in 30 years.
-- **Real spaced repetition.** FSRS scheduling with on-device parameter
-  optimization from your own review history — the same algorithm modern Anki
-  uses, not SM-2.
-- **Writes like a text editor.** Markdown with code highlighting, KaTeX math,
-  and paste-an-image support (auto-optimized to WebP). Front, `---`, back:
+**Review less, remember more.** FSRS shows you each card right as you're about
+to forget it, and retunes itself to *your* memory from your own history. Same
+retention, fewer reviews — it gives you your time back.
 
-  ```markdown
-  What does `Box<T>` do in Rust?
-  ---
-  Heap-allocates `T`.
-  ```
+**Cards you'll actually write.** A card is just `front` / `---` / `back`. Real
+markdown: code with highlighting, KaTeX math, paste an image straight in. No
+clunky note-type editors to fight.
 
-- **Local-first PWA.** Everything is instant from IndexedDB and works fully
-  offline — on the subway, on a plane. Reviews queue and sync when you're back.
-- **Multi-device that converges.** The review log is the source of truth;
-  the worker replays it deterministically, so offline reviews on two devices
-  merge instead of conflicting.
-- **No telemetry, no account, no middleman.** Your GitHub token never leaves
-  your Cloudflare worker. One bearer token connects your devices.
+```markdown
+What does `Box<T>` do in Rust?
+---
+Heap-allocates `T`.
+```
 
-## Setup (~5 minutes)
+**Fast, everywhere, offline.** Opens instantly, works on the subway, syncs the
+second you're back. Add it to your phone's home screen and it's an app. Review
+on your laptop and phone — the history merges, it never conflicts.
 
-You need: a free [Cloudflare account](https://dash.cloudflare.com/sign-up), a
-GitHub repo for your cards (private recommended, e.g. `yourname/recall-decks`),
-and a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new)
-scoped to **only that repo** with **Contents: Read and write**.
+**Never held hostage.** No subscription renting you your own memory, no startup
+that can disappear with ten years of your decks. Every card is a text file you
+can open, grep, or edit in any editor — today and in thirty years.
 
-**[Fork this repo first](https://github.com/samanamp/recall/fork)** (not "Use this
-template" — a template is a clean copy with no link back here, so it can never
-pull updates; a fork can). Then clone *your* fork and run the wizard:
+## Setup — about 5 minutes, all free
+
+**1. Fork this repo.** → **[Fork](https://github.com/samanamp/recall/fork)**
+(Use *Fork*, not "Use this template" — a template can't pull future updates; a
+fork can, and that's what powers auto-updates below.)
+
+**2. Create a free Cloudflare account.** → [sign up](https://dash.cloudflare.com/sign-up)
+(This is where your copy runs.)
+
+**3. Make a private repo for your cards.** Anything, e.g. `recall-decks`. Your
+decks live here as `.md` files — you can even hand-write cards on GitHub.
+
+**4. Create a GitHub token** scoped to *only* that cards repo, **Contents →
+Read and write**. → [new fine-grained token](https://github.com/settings/personal-access-tokens/new)
+
+**5. Run the one-command wizard.** It logs into Cloudflare, creates the
+database, sets your secrets, builds, and deploys — then prints your personal
+app URL.
 
 ```bash
 git clone https://github.com/<you>/recall
@@ -53,47 +60,35 @@ cd recall
 node tools/setup.mjs
 ```
 
-The wizard logs into Cloudflare, creates the D1 database, writes the config,
-sets your secrets, builds, and deploys. It prints your personal app URL —
-open it on each device, paste your app token in **Settings**, and hit
-**Sync now**. On a phone, "Add to Home Screen" installs it as an app. A
-welcome deck walks you through the rest.
+**6. Open your URL on each device.** Paste your app token in **Settings → Sync
+now**. On a phone, "Add to Home Screen" installs the app. A welcome deck takes
+it from there.
 
-## Updating
+## Auto-updates
 
-Because you forked, new work here flows to you. Turn on hands-off auto-deploy once:
+**Your copy keeps itself current.** Flip this on once and you never deploy
+again — every week it pulls the latest from here and redeploys itself:
 
-1. On your fork: **Actions** tab → enable workflows (forks start with Actions
-   off — this also gates the weekly schedule).
-2. **Settings → Secrets and variables → Actions** → add the Cloudflare
-   credentials and your D1 id. The exact list is at the top of
-   [.github/workflows/deploy.yml](.github/workflows/deploy.yml). Your
-   `APP_TOKEN` / `GITHUB_TOKEN` are worker secrets set by `setup.mjs` and
-   persist across deploys, so they're never stored in GitHub.
+1. On your fork → **Actions** tab → enable workflows.
+2. **Settings → Secrets and variables → Actions** → add your Cloudflare
+   credentials and D1 id (the exact four are listed at the top of
+   [deploy.yml](.github/workflows/deploy.yml)). Your worker secrets stay on
+   Cloudflare — they're never copied to GitHub.
 
-After that, the deploy workflow runs three ways:
+That's it. A weekly job fast-forwards your fork and redeploys, hands-off.
+Want an update *now*? Hit **Sync fork** on your repo, or **Run workflow** on
+the Actions page. Customizing? Keep changes on a branch — the auto-sync is
+fast-forward-only, so it leaves a diverged `main` alone and just redeploys it.
 
-- **Weekly schedule** — fast-forwards your fork from upstream and redeploys.
-  Fully automatic; nothing to click. *(GitHub auto-pauses scheduled workflows
-  on a fork after 60 days of no activity — you'll get an email, one click
-  resumes.)*
-- **Sync fork** — the button on your fork's homepage, whenever you want updates
-  now instead of waiting for Monday.
-- **Run workflow** — the manual button on the Actions → Deploy page.
+<sub>GitHub pauses a fork's scheduled jobs after 60 days idle — it emails you, one click resumes. Prefer fully manual? `git pull upstream main && node tools/setup.mjs` re-runs safely.</sub>
 
-Prefer to stay in control? Skip the Actions setup and update by hand with
-`git pull upstream main && node tools/setup.mjs` (re-running is safe). Keep any
-local customizations on a branch — the scheduled sync is fast-forward-only, so
-it won't touch your fork if `main` has diverged (it deploys your code as-is).
+## Will I really pay $0?
 
-## Free-tier limits, honestly
-
-Everything runs inside Cloudflare's and GitHub's free tiers. For one person —
-even a heavy, 200-reviews-a-day person — you will not get anywhere near the
-limits (100k worker requests/day, 100k DB writes/day, 5M reads/day). The
-sync is designed around them: steady state is a single ~100ms round trip.
-Sharing one deployment with a handful of family members is fine; running a
-public service off one free account is not what this is for.
+Yes. Steady-state sync is one ~100ms request, and even a heavy 200-reviews-a-day
+habit doesn't come close to Cloudflare's free limits (100k requests and 100k DB
+writes per day). One deployment comfortably covers you — and a few family
+members. Running a public service off one free account is the only thing it's
+not built for.
 
 ## Architecture
 
