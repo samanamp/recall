@@ -19,7 +19,9 @@ export async function saveCard(input: {
 }): Promise<CardRow> {
   const existing = input.id ? await db.cards.get(input.id) : undefined;
   const card: CardRow = {
-    id: existing?.id ?? ulid(),
+    // A provided id for a new card is honored (the .apkg importer derives
+    // deterministic ids from Anki card ids so re-imports update, not duplicate).
+    id: existing?.id ?? input.id ?? ulid(),
     deck: input.deck,
     front: input.front,
     back: input.back,

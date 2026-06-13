@@ -28,6 +28,8 @@ export default function Settings() {
   const [newPerDay, setNewPerDay] = useState(20);
   const [optimizing, setOptimizing] = useState(false);
   const [algoMsg, setAlgoMsg] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
   const retentionTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const reviewCount = useLiveQuery(async () => (await kvGet<number>("reviewCount")) ?? 0, [], 0);
@@ -86,6 +88,32 @@ export default function Settings() {
     await kvSet("appToken", appToken.trim());
     setSyncResult(await syncAll());
     setSyncing(false);
+  }
+
+  /** Anki .apkg import — heavy deps load only when a file is actually chosen. */
+  async function onImportApkg(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    setImporting(true);
+    setImportMsg("Reading archive…");
+    try {
+      const { importApkg } = await import("../lib/apkg");
+      const phases = { reading: "Reading archive", media: "Importing images", cards: "Importing cards", reviews: "Importing review history" };
+      const s = await importApkg(file, (p) =>
+        setImportMsg(`${phases[p.phase]}… ${p.done}/${p.total}`)
+      );
+      setImportMsg(
+        `✓ ${s.cards} cards in ${s.decks} deck${s.decks === 1 ? "" : "s"}, ` +
+          `${s.reviews} reviews, ${s.media} images` +
+          (s.skipped ? ` (${s.skipped} cards skipped)` : "") +
+          (s.reviews < s.totalRevlog ? ` — ${s.totalRevlog - s.reviews} revlog entries had no matching card` : "") +
+          ". Cards commit to your repo in the background."
+      );
+    } catch (err) {
+      setImportMsg(`✗ ${err instanceof Error ? err.message : String(err)}`);
+    }
+    setImporting(false);
   }
 
   async function onExport() {
@@ -333,6 +361,30 @@ export default function Settings() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-1 font-semibold">Import from Anki</h2>
+        <p className="mb-3 text-sm text-zinc-500">
+          Decks, cards, images, and full review history from an .apkg export.
+          In Anki: File → Export → check “Support older Anki versions”.
+          Re-importing the same file is safe.
+        </p>
+        <label className={`inline-block cursor-pointer ${secondary} ${importing ? "pointer-events-none opacity-50" : ""}`}>
+          {importing ? "Importing…" : "Import .apkg"}
+          <input
+            type="file"
+            accept=".apkg,.colpkg"
+            className="hidden"
+            disabled={importing}
+            onChange={(e) => void onImportApkg(e)}
+          />
+        </label>
+        {importMsg && (
+          <p className={`mt-2 text-sm ${importMsg.startsWith("✗") ? "text-red-500" : "text-zinc-500"}`} role="status">
+            {importMsg}
+          </p>
+        )}
       </section>
 
       <section>

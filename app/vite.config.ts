@@ -11,6 +11,9 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      // The .apkg importer's SQLite wasm is 660 kB and used at most once per
+      // user — fetch it on demand instead of precaching it on every device.
+      workbox: { globIgnores: ["**/sql-wasm-*.wasm"] },
       manifest: {
         name: "recall",
         short_name: "recall",
