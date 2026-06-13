@@ -35,6 +35,11 @@ on your laptop and phone — the history merges, it never conflicts.
 that can disappear with ten years of your decks. Every card is a text file you
 can open, grep, or edit in any editor — today and in thirty years.
 
+**Capture from anywhere.** A [browser extension](extension/) turns highlighted
+text on any page into a card: right-click → review the AI-drafted front/back →
+save. Generation runs on your own worker (Cloudflare Workers AI, free tier, no
+extra key), and every card is shown for a glance before it's saved.
+
 ## Setup — about 5 minutes, all free
 
 **1. Fork this repo.** → **[Fork](https://github.com/samanamp/recall/fork)**
@@ -93,10 +98,11 @@ not built for.
 ## Architecture
 
 ```
-app/     — React PWA (Vite + TS + Tailwind + Dexie + ts-fsrs)
-worker/  — Cloudflare Worker: serves the app (static assets) + API at /api
-           (Hono + D1 + GitHub proxy)
-tools/   — setup wizard, maintenance scripts
+app/        — React PWA (Vite + TS + Tailwind + Dexie + ts-fsrs)
+worker/     — Cloudflare Worker: serves the app (static assets) + API at /api
+              (Hono + D1 + GitHub proxy + Workers AI)
+extension/  — Chrome/Chromium MV3 extension: highlight → flashcard
+tools/      — setup wizard, maintenance scripts
 ```
 
 - **Cards/media:** the app keeps a local copy in IndexedDB and pushes edits as

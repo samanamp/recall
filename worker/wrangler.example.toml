@@ -19,10 +19,17 @@ binding = "DB"
 database_name = "recall"
 database_id = "__DATABASE_ID__"
 
+# Workers AI — powers the browser extension's "make a flashcard" generation.
+# Free tier: 10,000 Neurons/day (hundreds of cards). No external key.
+[ai]
+binding = "AI"
+
 [vars]
 # The GitHub repo that holds your cards, e.g. "yourname/recall-decks"
 GITHUB_REPO = "__CARDS_REPO__"
 GITHUB_BRANCH = "__CARDS_BRANCH__"
+# Flashcard model (default: llama-3.3-70b-instruct-fp8-fast). For cheaper/faster:
+# AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8"
 
 # Secrets (set with `npx wrangler secret put <NAME>`):
 #   APP_TOKEN     - shared secret your devices use to talk to this worker

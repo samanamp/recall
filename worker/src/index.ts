@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { fsrs } from "ts-fsrs";
+import { makeCard, sanitizeDeck } from "./cardfile";
+import { buildMessages, DEFAULT_MODEL, parseFlashcard } from "./flashcard";
 import { replayReviews } from "./replay";
 import {
   deleteFile,
@@ -13,9 +15,19 @@ import {
   type GitHubEnv,
 } from "./github";
 
+/** Minimal shape of the Workers AI binding we use (model-agnostic). */
+interface WorkersAI {
+  run(
+    model: string,
+    options: Record<string, unknown>
+  ): Promise<{ response?: string } | string>;
+}
+
 type Env = GitHubEnv & {
   DB: D1Database;
   APP_TOKEN: string;
+  AI: WorkersAI;
+  AI_MODEL?: string;
 };
 
 interface ReviewRow {
@@ -275,6 +287,57 @@ app.delete("/cards/file", async (c) => {
   }
   await patchManifest(c.env, path, null);
   return c.json({ ok: true });
+});
+
+// Create a card from {deck, front, back}. The one place clients make cards:
+// generates id/slug/path + serializes server-side, so the browser extension
+// (and anything else) stays dumb. Writes through the same putFile+patch path.
+app.post("/cards", async (c) => {
+  const { deck, front, back } = await c.req.json<{
+    deck?: string;
+    front?: string;
+    back?: string;
+  }>();
+  const cleanDeck = sanitizeDeck(deck ?? "");
+  if (!cleanDeck || typeof front !== "string" || !front.trim()) {
+    return c.json({ error: "deck and front are required" }, 400);
+  }
+  const card = makeCard(cleanDeck, front.trim(), (back ?? "").trim());
+  const result = await putFile(
+    c.env,
+    card.path,
+    btoa(String.fromCharCode(...new TextEncoder().encode(card.content))),
+    `add ${card.path}`
+  );
+  await patchManifest(c.env, card.path, result.sha);
+  return c.json({ id: card.id, deck: cleanDeck, path: card.path, sha: result.sha });
+});
+
+// Generate (not save) a flashcard from highlighted text via Workers AI.
+// Returns {front, back} for the client to preview/edit before POST /cards.
+app.post("/flashcard", async (c) => {
+  const { text, title, url, avoid } = await c.req.json<{
+    text?: string;
+    title?: string;
+    url?: string;
+    avoid?: string;
+  }>();
+  if (typeof text !== "string" || text.trim().length < 3) {
+    return c.json({ error: "need at least a few words of text" }, 400);
+  }
+  const model = c.env.AI_MODEL || DEFAULT_MODEL;
+  const out = await c.env.AI.run(model, {
+    messages: buildMessages(text, { title, url, avoid }),
+    temperature: avoid ? 0.7 : 0.3, // looser on regenerate, for variety
+    max_tokens: 400,
+  });
+  const raw = typeof out === "string" ? out : out.response ?? "";
+  try {
+    return c.json(parseFlashcard(raw)); // handles string or already-parsed object
+
+  } catch (e) {
+    return c.json({ error: `couldn't generate a card: ${(e as Error).message}` }, 502);
+  }
 });
 
 app.put("/media", async (c) => {
