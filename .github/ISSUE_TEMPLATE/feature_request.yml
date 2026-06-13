@@ -1,0 +1,19 @@
+name: Feature request
+description: An idea that fits a $0/month, markdown-in-your-repo flashcard app
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve for you?
+      description: The use case matters more than the proposed solution.
+    validations:
+      required: true
+  - type: textarea
+    id: fit
+    attributes:
+      label: How does it fit the constraints?
+      description: >
+        recall stays $0/month, account-free, and local-first, with cards as
+        plain markdown in your own repo. Features that need a paid service or
+        a server-side account won't land — see CONTRIBUTING.md.
