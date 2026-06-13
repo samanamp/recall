@@ -32,8 +32,8 @@ async function request<T>(
   init: RequestInit = {}
 ): Promise<T> {
   const settings = await getSettings();
-  if (!settings) throw new ApiError(0, "not configured — set worker URL and token in Settings");
-  const res = await fetch(`${settings.workerUrl.replace(/\/$/, "")}${path}`, {
+  if (!settings) throw new ApiError(0, "not configured — set the app token in Settings");
+  const res = await fetch(`${settings.workerUrl.replace(/\/$/, "")}/api${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${settings.appToken}`,
@@ -54,7 +54,7 @@ async function request<T>(
     // HTML instead of JSON ⇒ the URL points at a website, not the worker API.
     throw new ApiError(
       0,
-      "Worker URL returned a webpage, not JSON — use the recall-api workers.dev URL in Settings, not the app's URL"
+      "Worker URL returned a webpage, not JSON — leave it blank when the app is served by the worker, or point it at your recall worker URL"
     );
   }
 }
@@ -122,7 +122,7 @@ export const api = {
     const settings = await getSettings();
     if (!settings) throw new ApiError(0, "not configured");
     const res = await fetch(
-      `${settings.workerUrl.replace(/\/$/, "")}/media/file?path=${encodeURIComponent(path)}`,
+      `${settings.workerUrl.replace(/\/$/, "")}/api/media/file?path=${encodeURIComponent(path)}`,
       { headers: { Authorization: `Bearer ${settings.appToken}` } }
     );
     if (!res.ok) throw new ApiError(res.status, `media ${path}: ${res.status}`);

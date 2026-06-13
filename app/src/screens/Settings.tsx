@@ -168,15 +168,16 @@ export default function Settings() {
       <section>
         <h2 className="mb-1 font-semibold">Sync</h2>
         <p className="mb-4 text-sm text-zinc-500">
-          Your worker URL and the app token you chose for it.
+          The app token you chose during setup. Worker URL is only needed when the app
+          isn't served by the worker itself (e.g. local dev).
         </p>
         <div className="space-y-3">
           <div>
-            <label className={label}>Worker URL</label>
+            <label className={label}>Worker URL (optional)</label>
             <input
               value={workerUrl}
               onChange={(e) => setWorkerUrl(e.target.value)}
-              placeholder="https://recall-api.yourname.workers.dev"
+              placeholder="blank = this origin"
               className={input}
             />
           </div>
@@ -192,7 +193,7 @@ export default function Settings() {
           </div>
           <button
             onClick={() => void onSync()}
-            disabled={syncing || !workerUrl.trim() || !appToken.trim()}
+            disabled={syncing || !appToken.trim()}
             className="w-full rounded-xl border border-accent-action-border bg-accent-action py-2.5 text-sm font-semibold text-accent-action-text shadow-sm transition-colors hover:bg-accent-action-hover disabled:opacity-40"
           >
             {syncing ? "Syncing…" : "Sync now"}

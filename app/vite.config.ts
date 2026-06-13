@@ -4,6 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // Local dev: vite serves the app, `wrangler dev` serves the API on :8787.
+  server: { proxy: { "/api": "http://localhost:8787" } },
   plugins: [
     react(),
     tailwindcss(),

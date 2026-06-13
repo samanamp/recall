@@ -87,6 +87,7 @@ export async function kvSet(key: string, value: unknown): Promise<void> {
 }
 
 export interface Settings {
+  /** Empty string = same origin (the worker serves the app itself). */
   workerUrl: string;
   appToken: string;
   deviceId: string;
@@ -97,8 +98,8 @@ export async function getSettings(): Promise<Settings | null> {
     kvGet<string>("workerUrl"),
     kvGet<string>("appToken"),
   ]);
-  if (!workerUrl || !appToken) return null;
-  return { workerUrl, appToken, deviceId: await getDeviceId() };
+  if (!appToken) return null;
+  return { workerUrl: workerUrl ?? "", appToken, deviceId: await getDeviceId() };
 }
 
 /**

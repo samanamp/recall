@@ -525,4 +525,13 @@ async function replayCard(
     .run();
 }
 
-export default app;
+// The API mounts at /api (the worker also serves the PWA via static assets,
+// same-origin) and at the root (clients pointing a Worker URL directly at the
+// old paths). Static assets are matched before the worker runs except for
+// /api/* (run_worker_first), so root API paths only reach us as non-navigation
+// fetches — which is what API calls are.
+const root = new Hono<{ Bindings: Env }>();
+root.route("/api", app);
+root.route("/", app);
+
+export default root;
