@@ -6,20 +6,23 @@
  * this context).
  */
 (() => {
-  if (window.__recallReady) return; // guard re-injection
-  window.__recallReady = true;
-
   const send = (msg) => new Promise((res) => chrome.runtime.sendMessage(msg, res));
   let host, root, els, source;
 
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === "recall:show") {
-      source = { text: msg.text, title: msg.title, url: msg.url };
-      open();
-      void generate();
-      void loadDecks();
-    }
-  });
+  function onShow(msg) {
+    if (msg.type !== "recall:show") return;
+    source = { text: msg.text, title: msg.title, url: msg.url };
+    open();
+    void generate();
+    void loadDecks();
+  }
+
+  // Replace any listener left by a prior injection (including an older version
+  // of this script after an extension update), so re-injection always runs the
+  // current code exactly once — no duplicate panels, no stale handler winning.
+  if (window.__recallShow) chrome.runtime.onMessage.removeListener(window.__recallShow);
+  window.__recallShow = onShow;
+  chrome.runtime.onMessage.addListener(onShow);
 
   function open() {
     if (host) close();
@@ -74,7 +77,21 @@
       setBusy(false, `⚠ ${r?.error || "generation failed"}`);
       return;
     }
-    renderCards(r.cards || []);
+    // Tolerate response-shape skew (e.g. a stale background service worker after
+    // an extension update): accept {cards}, a wrapped {card:{cards}}, or a single
+    // {card:{front,back}} — and never fail silently into an empty panel.
+    const cards = Array.isArray(r.cards)
+      ? r.cards
+      : Array.isArray(r.card?.cards)
+        ? r.card.cards
+        : r.card?.front
+          ? [r.card]
+          : [];
+    if (cards.length === 0) {
+      setBusy(false, "⚠ No cards came back. Reload the extension at chrome://extensions, reload this page, and try again.");
+      return;
+    }
+    renderCards(cards);
     setBusy(false, "Review, trim, save — ⌘⏎ / Esc");
     els.list.querySelector("textarea")?.focus();
   }
