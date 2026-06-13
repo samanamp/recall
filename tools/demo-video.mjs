@@ -114,8 +114,11 @@ for (let i = 0; ; i++) {
 const browser = await chromium.launch();
 const context = await browser.newContext({
   viewport: { width: 1280, height: 800 },
+  deviceScaleFactor: 2, // crisp page.screenshot (retina); video is CSS-res regardless
   colorScheme: "dark", // recall's signature look; theme demo toggles from here
   serviceWorkers: "block", // the PWA SW would dodge our route mocks
+  // MUST equal the viewport: Playwright records at CSS-pixel resolution, so a
+  // larger canvas just grey-pads the frame instead of scaling content up.
   recordVideo: { dir: "/tmp/recall-demo", size: { width: 1280, height: 800 } },
 });
 
@@ -272,8 +275,16 @@ const mp4 = join(docsDir, "demo.mp4");
 const gif = join(docsDir, "demo.gif");
 const palette = join("/tmp", "recall-palette.png");
 const ff = (args) => spawnSync(ffmpeg, ["-y", ...args], { stdio: "ignore" });
-ff(["-i", webm, "-movflags", "+faststart", "-pix_fmt", "yuv420p", "-vf", "scale=1280:-2", "-c:v", "libx264", "-crf", "24", mp4]);
-ff(["-i", webm, "-vf", "fps=12,scale=960:-1:flags=lanczos,palettegen=stats_mode=diff", palette]);
-ff(["-i", webm, "-i", palette, "-lavfi", "fps=12,scale=960:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3", gif]);
+// MP4: keep the full 1600px source, near-visually-lossless.
+ff(["-i", webm, "-movflags", "+faststart", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-crf", "20", mp4]);
+// GIF at the native 1280px width — NO downscale. The old 960px GIF shrank the
+// ~896px content to ~672px, which GitHub then upscaled back to its ~880px column
+// (upscaling = the blur). At 1280 the content lands ~1:1 in the README.
+// dither=none: recall's UI is mostly flat dark surfaces + solid accent colors,
+// so error diffusion only added noise (softer text, bigger file). None is both
+// crisper and ~1MB smaller here.
+const gscale = "fps=12,scale=1280:-1:flags=lanczos";
+ff(["-i", webm, "-vf", `${gscale},palettegen=max_colors=256:stats_mode=diff`, palette]);
+ff(["-i", webm, "-i", palette, "-lavfi", `${gscale}[x];[x][1:v]paletteuse=dither=none`, gif]);
 console.log(`✓ ${mp4}`);
 console.log(`✓ ${gif}`);
