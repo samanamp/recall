@@ -330,7 +330,7 @@ app.post("/flashcard", async (c) => {
   const out = await c.env.AI.run(model, {
     messages: buildMessages(text, { title, url, avoid }),
     temperature: avoid ? 0.7 : 0.3, // looser on regenerate, for variety
-    max_tokens: 800, // room for a few cards
+    max_tokens: 1200, // room for a few cards with fuller answers
   });
   const raw = typeof out === "string" ? out : out.response ?? "";
   try {
