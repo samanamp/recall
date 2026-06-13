@@ -1,38 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { buildMessages, parseFlashcard } from "../src/flashcard";
+import { buildMessages, parseFlashcards } from "../src/flashcard";
 import { cardPath, sanitizeDeck, serializeCardFile, slugify } from "../src/cardfile";
 
-describe("parseFlashcard", () => {
-  it("parses a clean JSON object", () => {
-    expect(parseFlashcard('{"front":"Q?","back":"A"}')).toEqual({ front: "Q?", back: "A" });
+describe("parseFlashcards", () => {
+  it("parses a JSON array of cards", () => {
+    expect(parseFlashcards('[{"front":"Q1","back":"A1"},{"front":"Q2","back":"A2"}]')).toEqual([
+      { front: "Q1", back: "A1" },
+      { front: "Q2", back: "A2" },
+    ]);
   });
 
-  it("accepts an already-parsed object (some models pre-parse)", () => {
-    expect(parseFlashcard({ front: "Q?", back: "A" })).toEqual({ front: "Q?", back: "A" });
+  it("accepts an already-parsed array (some models pre-parse)", () => {
+    expect(parseFlashcards([{ front: "Q", back: "A" }])).toEqual([{ front: "Q", back: "A" }]);
+  });
+
+  it("wraps a single object and a {cards:[]} envelope", () => {
+    expect(parseFlashcards('{"front":"Q","back":"A"}')).toEqual([{ front: "Q", back: "A" }]);
+    expect(parseFlashcards('{"cards":[{"front":"Q","back":"A"}]}')).toEqual([
+      { front: "Q", back: "A" },
+    ]);
   });
 
   it("tolerates code fences and leading prose", () => {
-    const raw = 'Sure!\n```json\n{"front":"What is X?","back":"Y"}\n```';
-    expect(parseFlashcard(raw)).toEqual({ front: "What is X?", back: "Y" });
+    const raw = 'Sure!\n```json\n[{"front":"What is X?","back":"Y"}]\n```';
+    expect(parseFlashcards(raw)).toEqual([{ front: "What is X?", back: "Y" }]);
   });
 
-  it("grabs the object even with trailing text", () => {
-    expect(parseFlashcard('{"front":"a","back":"b"} hope this helps')).toEqual({
-      front: "a",
-      back: "b",
-    });
+  it("skips malformed entries but keeps the good ones", () => {
+    const raw = '[{"front":"ok","back":"yes"},{"front":"no back"},{"back":"no front"}]';
+    expect(parseFlashcards(raw)).toEqual([{ front: "ok", back: "yes" }]);
   });
 
-  it("throws on missing fields or non-JSON", () => {
-    expect(() => parseFlashcard('{"front":"only front"}')).toThrow(/back/);
-    expect(() => parseFlashcard('{"back":"only back"}')).toThrow(/front/);
-    expect(() => parseFlashcard("no json here")).toThrow();
-    expect(() => parseFlashcard("")).toThrow();
+  it("caps the number of cards", () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({ front: `q${i}`, back: `a${i}` }));
+    expect(parseFlashcards(many).length).toBe(5);
+  });
+
+  it("throws when nothing usable is present", () => {
+    expect(() => parseFlashcards("[]")).toThrow();
+    expect(() => parseFlashcards("no json here")).toThrow();
+    expect(() => parseFlashcards("")).toThrow();
   });
 
   it("trims and clamps runaway output", () => {
-    const long = "x".repeat(5000);
-    const card = parseFlashcard(JSON.stringify({ front: "  Q  ", back: long }));
+    const card = parseFlashcards([{ front: "  Q  ", back: "x".repeat(5000) }])[0];
     expect(card.front).toBe("Q");
     expect(card.back.length).toBe(2000);
   });

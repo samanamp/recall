@@ -82,17 +82,28 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     try {
       if (msg.type === "recall:generate") {
-        sendResponse({ ok: true, card: await api("/flashcard", {
+        const { cards } = await api("/flashcard", {
           method: "POST",
           body: JSON.stringify({ text: msg.text, title: msg.title, url: msg.url, avoid: msg.avoid }),
-        }) });
-      } else if (msg.type === "recall:save") {
-        const card = await api("/cards", {
-          method: "POST",
-          body: JSON.stringify({ deck: msg.deck, front: msg.front, back: msg.back }),
         });
-        await chrome.storage.local.set({ lastDeck: msg.deck });
-        sendResponse({ ok: true, card });
+        sendResponse({ ok: true, cards });
+      } else if (msg.type === "recall:save") {
+        // Save each kept card; tolerate a partial failure rather than lose the rest.
+        let saved = 0;
+        let error = null;
+        for (const card of msg.cards || []) {
+          try {
+            await api("/cards", {
+              method: "POST",
+              body: JSON.stringify({ deck: msg.deck, front: card.front, back: card.back }),
+            });
+            saved++;
+          } catch (e) {
+            error = e?.message || String(e);
+          }
+        }
+        if (saved > 0) await chrome.storage.local.set({ lastDeck: msg.deck });
+        sendResponse({ ok: saved > 0, saved, error });
       } else if (msg.type === "recall:decks") {
         sendResponse({ ok: true, ...(await decksAndLast()) });
       } else if (msg.type === "recall:test") {

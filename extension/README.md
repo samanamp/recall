@@ -1,8 +1,8 @@
 # recall — browser extension
 
 Highlight text on any page → **right-click → "Create recall flashcard"** → a
-small panel writes a card with AI, you glance/edit it, hit Save. It lands in
-your deck like any other card.
+small panel drafts a few atomic cards with AI (one per idea worth remembering),
+you trim/edit them, hit Save. They land in your deck like any other card.
 
 The generation runs on **your** recall worker via Cloudflare Workers AI — no
 extra account, no API key, free-tier covers hundreds of cards a day. The card
@@ -26,10 +26,11 @@ That's it. Works in Chrome, Edge, Brave, and other Chromium browsers.
 ## Using it
 
 - Select text → right-click → **Create recall flashcard from "…"**.
-- The panel generates a card; edit the front/back, pick a deck (it remembers
-  your last one and suggests existing decks).
-- **↻ Regenerate** for a different take. **Save** (or `⌘/Ctrl+Enter`) to keep
-  it; **Esc** to discard.
+- The panel drafts 1–4 atomic cards (a rich passage yields several; a thin one,
+  just one). Edit any of them, **×** to drop the ones you don't want, and pick a
+  deck (it remembers your last and suggests existing decks).
+- **↻ Regenerate** for a different set. **Save** (or `⌘/Ctrl+Enter`) keeps what's
+  left; **Esc** discards everything.
 
 ## How it's wired
 
@@ -37,8 +38,8 @@ That's it. Works in Chrome, Edge, Brave, and other Chromium browsers.
 content.js    shadow-DOM preview overlay (no page-style bleed); UI only
 background.js context menu + all worker calls — the app token stays here,
               never enters the page
-worker        POST /api/flashcard  (text → {front, back} via Workers AI)
-              POST /api/cards       (creates the card file in your repo)
+worker        POST /api/flashcard  (text → {cards:[…]} via Workers AI)
+              POST /api/cards       (creates one card file in your repo)
 ```
 
 The app token lives only in the service worker and `chrome.storage`; the

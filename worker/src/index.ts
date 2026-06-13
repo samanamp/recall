@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { fsrs } from "ts-fsrs";
 import { makeCard, sanitizeDeck } from "./cardfile";
-import { buildMessages, DEFAULT_MODEL, parseFlashcard } from "./flashcard";
+import { buildMessages, DEFAULT_MODEL, parseFlashcards } from "./flashcard";
 import { replayReviews } from "./replay";
 import {
   deleteFile,
@@ -313,8 +313,9 @@ app.post("/cards", async (c) => {
   return c.json({ id: card.id, deck: cleanDeck, path: card.path, sha: result.sha });
 });
 
-// Generate (not save) a flashcard from highlighted text via Workers AI.
-// Returns {front, back} for the client to preview/edit before POST /cards.
+// Generate (not save) 1–4 atomic flashcards from highlighted text via Workers
+// AI. Returns {cards:[{front,back}]} for the client to review/edit/trim before
+// POST /cards. A rich passage yields several cards; a thin one, just one.
 app.post("/flashcard", async (c) => {
   const { text, title, url, avoid } = await c.req.json<{
     text?: string;
@@ -329,14 +330,13 @@ app.post("/flashcard", async (c) => {
   const out = await c.env.AI.run(model, {
     messages: buildMessages(text, { title, url, avoid }),
     temperature: avoid ? 0.7 : 0.3, // looser on regenerate, for variety
-    max_tokens: 400,
+    max_tokens: 800, // room for a few cards
   });
   const raw = typeof out === "string" ? out : out.response ?? "";
   try {
-    return c.json(parseFlashcard(raw)); // handles string or already-parsed object
-
+    return c.json({ cards: parseFlashcards(raw) }); // handles array/object/string
   } catch (e) {
-    return c.json({ error: `couldn't generate a card: ${(e as Error).message}` }, 502);
+    return c.json({ error: `couldn't generate cards: ${(e as Error).message}` }, 502);
   }
 });
 

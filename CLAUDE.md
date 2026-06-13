@@ -66,15 +66,18 @@ heartbeat, plus debounced `requestSync()` from every mutating action in
 
 MV3 extension: highlight text on a page → `POST /api/flashcard` (Workers AI,
 `env.AI`, default model `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, override via
-`AI_MODEL` var) returns `{front, back}`; a shadow-DOM preview lets the user
-edit, then `POST /api/cards` creates the file. Both endpoints are new and
-worker-authoritative. `POST /cards` is now the canonical "create a card" API
+`AI_MODEL` var) returns `{cards:[{front,back}]}` — 1–4 atomic cards per
+selection (prompt biases toward the insight, not the easy definition); a
+shadow-DOM preview lets the user edit/trim, then `POST /api/cards` creates each
+kept card (the extension loops; partial-failure tolerant). Both endpoints are
+new and worker-authoritative. `POST /cards` is the canonical "create a card" API
 (generates id/slug/path + serializes via `worker/src/cardfile.ts`, mirrors the
 app's format) — prefer it over hand-rolling card files in any future client.
 The app token lives only in the extension's background worker + chrome.storage,
 never in page/content-script context. Prompt + tolerant parsing live in
-`worker/src/flashcard.ts` (pure, unit-tested); the model can return `response`
-as a string OR an already-parsed object — `parseFlashcard` handles both.
+`worker/src/flashcard.ts` (pure, unit-tested); `parseFlashcards` accepts a JSON
+array, a `{cards:[]}` envelope, a single object, or a string — and the model can
+return `response` already parsed.
 Gotcha: Workers AI model ids get deprecated (llama-3.1-8b-instruct died
 2026-05-30) — if generation 5028-errors, list `ai/models/search?task=Text
 Generation` and update the default. Requires the `[ai]` binding in wrangler;

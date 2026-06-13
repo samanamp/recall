@@ -36,9 +36,9 @@ that can disappear with ten years of your decks. Every card is a text file you
 can open, grep, or edit in any editor — today and in thirty years.
 
 **Capture from anywhere.** A [browser extension](extension/) turns highlighted
-text on any page into a card: right-click → review the AI-drafted front/back →
-save. Generation runs on your own worker (Cloudflare Workers AI, free tier, no
-extra key), and every card is shown for a glance before it's saved.
+text on any page into cards: right-click → it drafts a few atomic cards (one per
+idea), you trim and edit → save. Generation runs on your own worker (Cloudflare
+Workers AI, free tier, no extra key), and every card is shown before it's saved.
 
 ## Setup — about 5 minutes, all free
 
