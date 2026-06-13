@@ -77,6 +77,19 @@ function makeScheduler(p: FsrsParams): ReturnType<typeof fsrs> {
   }
 }
 
+/**
+ * sync_stats keeps the change cursor and review count O(1): every review
+ * insert/delete must bump `seq` (so other devices notice) and adjust
+ * `review_count` (so heartbeats never COUNT(*) the log).
+ */
+async function bumpSyncStats(db: D1Database, inserted: number, deleted = 0): Promise<void> {
+  if (inserted === 0 && deleted === 0) return;
+  await db
+    .prepare("UPDATE sync_stats SET seq = seq + ?, review_count = review_count + ?")
+    .bind(inserted + deleted, inserted - deleted)
+    .run();
+}
+
 // ----------------------------------------------------- manifest cache
 //
 // GitHub's tree API costs 600-1200ms — far too slow to sit on the sync hot
@@ -291,9 +304,10 @@ app.post("/sync", async (c) => {
     const insert = c.env.DB.prepare(
       "INSERT OR IGNORE INTO reviews (id, card_id, rating, reviewed_at, device_id) VALUES (?, ?, ?, ?, ?)"
     );
-    await c.env.DB.batch(
+    const results = await c.env.DB.batch(
       reviews.map((r) => insert.bind(r.id, r.cardId, r.rating, r.reviewedAt, r.deviceId))
     );
+    await bumpSyncStats(c.env.DB, results.reduce((s, r) => s + (r.meta.changes ?? 0), 0));
     const scheduler = makeScheduler(params);
     for (const cardId of new Set(reviews.map((r) => r.cardId))) {
       await replayCard(c.env.DB, cardId, scheduler);
@@ -304,9 +318,9 @@ app.post("/sync", async (c) => {
     c.env.DB.prepare("SELECT json, fetched_at, version FROM manifest_cache WHERE k = 1")
       .first<{ json: string; fetched_at: number; version: number }>(),
     c.env.DB.prepare("SELECT updated_at FROM params WHERE k = 1").first<{ updated_at: number }>(),
-    c.env.DB.prepare(
-      "SELECT COUNT(*) AS n, COALESCE(MAX(rowid), 0) AS mx FROM reviews"
-    ).first<{ n: number; mx: number }>(),
+    // O(1) row instead of COUNT(*) — a heartbeat must not scan the log.
+    c.env.DB.prepare("SELECT seq, review_count FROM sync_stats WHERE k = 1")
+      .first<{ seq: number; review_count: number }>(),
   ]);
 
   // Keep hand-edits-on-GitHub flowing for idle clients: revalidate in the
@@ -324,15 +338,14 @@ app.post("/sync", async (c) => {
   const current = [
     manifest?.version ?? 1,
     paramsRow?.updated_at ?? 0,
-    reviewStat?.mx ?? 0,
-    reviewStat?.n ?? 0,
+    reviewStat?.seq ?? 0,
   ].join(":");
 
   if (!pushed && cursor && cursor === current) {
     return c.json({
       unchanged: true,
       cursor: current,
-      reviewCount: reviewStat?.n ?? 0,
+      reviewCount: reviewStat?.review_count ?? 0,
       accepted: 0,
     });
   }
@@ -343,7 +356,7 @@ app.post("/sync", async (c) => {
     state,
     params,
     cursor: current,
-    reviewCount: reviewStat?.n ?? 0,
+    reviewCount: reviewStat?.review_count ?? 0,
     accepted: pushed ? reviews.length : 0,
   });
 });
@@ -369,9 +382,10 @@ app.post("/reviews", async (c) => {
   const insert = c.env.DB.prepare(
     "INSERT OR IGNORE INTO reviews (id, card_id, rating, reviewed_at, device_id) VALUES (?, ?, ?, ?, ?)"
   );
-  await c.env.DB.batch(
+  const results = await c.env.DB.batch(
     reviews.map((r) => insert.bind(r.id, r.cardId, r.rating, r.reviewedAt, r.deviceId))
   );
+  await bumpSyncStats(c.env.DB, results.reduce((s, r) => s + (r.meta.changes ?? 0), 0));
 
   // Recompute derived FSRS state for every touched card by replaying its full
   // log. Handles out-of-order arrival from devices that reviewed offline.
@@ -392,6 +406,7 @@ app.delete("/reviews", async (c) => {
     .first<{ card_id: string }>();
   if (!row) return c.json({ ok: true, missing: true }); // never pushed or already undone
   await c.env.DB.prepare("DELETE FROM reviews WHERE id = ?").bind(id).run();
+  await bumpSyncStats(c.env.DB, 0, 1);
   const scheduler = makeScheduler(await getParams(c.env.DB));
   await replayCard(c.env.DB, row.card_id, scheduler);
   // Last review gone → replay no-ops; drop the stale derived state (card is new again).
