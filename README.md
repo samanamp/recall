@@ -1,6 +1,6 @@
 # recall
 
-### Spaced-repetition flashcards as plain markdown. Beautiful, offline, and $0/month.
+### Spaced-repetition flashcards as plain markdown. Beautiful, runs anywhere (on your phone/desktop, in airplane), and $0/month.
 
 Like Anki — but cards are `.md` files you write in seconds, the scheduler
 ([FSRS](https://github.com/open-spaced-repetition/ts-fsrs)) means you review
