@@ -8,7 +8,9 @@ recall is a spaced-repetition app (think Anki) where every card is a plain
 deploys to Cloudflare's free tier in about five minutes. No accounts, no
 servers to babysit, no subscription — **$0/month**, by design.
 
-<!-- screenshot: drop app/docs/screenshot.png here -->
+![recall — add a card, review with FSRS, browse, stats, and themes](docs/demo.gif)
+
+<sub>▶ [Full-quality video](docs/demo.mp4) · the tour adds a card, reviews with grading, searches, shows 90 days of stats, and switches accent/light-dark themes.</sub>
 
 ## Why
 
