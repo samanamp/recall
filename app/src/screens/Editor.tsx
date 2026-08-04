@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import Markdown from "../components/Markdown";
-import { addMedia, saveCard } from "../lib/actions";
+import { addMedia, deleteCard, saveCard } from "../lib/actions";
 import { splitFrontBack } from "../lib/cardfile";
 import { db } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
@@ -20,6 +20,8 @@ export default function Editor() {
   const [text, setText] = useState(() => (id ? "" : localStorage.getItem("editorDraft") ?? ""));
   const [mobileTab, setMobileTab] = useState<"write" | "preview">("write");
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const decks = useLiveQuery(
@@ -123,6 +125,14 @@ export default function Editor() {
     }
   }
 
+  /** Deleting drops the card and its review history; the repo file goes on next sync. */
+  async function onDelete() {
+    if (!id || deleting) return;
+    setDeleting(true);
+    await deleteCard(id);
+    navigate(-1);
+  }
+
   const valid = deck.trim() !== "" && front !== "";
   const needsDeck = deck.trim() === "" && text.trim() !== "";
 
@@ -130,18 +140,53 @@ export default function Editor() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <h1 className="text-xl font-bold tracking-tight">{id ? "Edit card" : "New card"}</h1>
-        <button
-          onClick={() => void onSave()}
-          disabled={(!valid || saving) && !justAdded}
-          className={`ml-auto rounded-xl px-5 py-1.5 text-sm font-semibold shadow-sm transition-colors disabled:opacity-40 ${
-            justAdded
-              ? "bg-emerald-600 text-white"
-              : "border border-accent-action-border bg-accent-action text-accent-action-text hover:bg-accent-action-hover"
-          }`}
-        >
-          {justAdded ? "Added ✓" : id ? "Save" : "Add card"}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {id && !confirmDelete && (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="rounded-md px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+            >
+              delete
+            </button>
+          )}
+          <button
+            onClick={() => void onSave()}
+            disabled={(!valid || saving) && !justAdded}
+            className={`rounded-xl px-5 py-1.5 text-sm font-semibold shadow-sm transition-colors disabled:opacity-40 ${
+              justAdded
+                ? "bg-emerald-600 text-white"
+                : "border border-accent-action-border bg-accent-action text-accent-action-text hover:bg-accent-action-hover"
+            }`}
+          >
+            {justAdded ? "Added ✓" : id ? "Save" : "Add card"}
+          </button>
+        </div>
       </div>
+
+      {id && confirmDelete && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900 dark:bg-red-950/40">
+          <span className="text-sm text-red-700 dark:text-red-300">
+            Delete this card and its review history? The file stays in git history, but the app
+            can’t undo this.
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+              className="rounded-lg px-3 py-1.5 text-sm text-zinc-600 transition-colors hover:bg-white disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void onDelete()}
+              disabled={deleting}
+              className="rounded-lg bg-red-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-40"
+            >
+              {deleting ? "Deleting…" : "Delete card"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* deck picker: chips beat a datalist, especially on mobile */}
       <div className="flex flex-wrap items-center gap-1.5">
