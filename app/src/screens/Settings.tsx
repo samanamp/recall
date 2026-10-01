@@ -15,6 +15,7 @@ import {
   type ColorTheme,
   type Theme,
 } from "../lib/theme";
+import { IconCheck } from "../components/icons";
 
 const OPTIMIZE_MIN_REVIEWS = 100;
 
@@ -202,243 +203,262 @@ export default function Settings() {
   }
 
   const input =
-    "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-accent-500 dark:border-zinc-800 dark:bg-zinc-900/70";
-  const label = "mb-1 block text-xs font-medium text-zinc-500";
+    "h-11 w-full rounded-md border border-hairline bg-paper px-3 text-sm text-ink outline-none placeholder:text-faint focus:border-accent-rule";
+  const label = "label-caps mb-1.5 block text-muted";
   const secondary =
-    "rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:border-accent-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-accent-600";
+    "inline-flex h-10 items-center justify-center rounded-md border border-hairline-strong bg-paper px-4 text-sm font-medium text-ink transition-colors hover:border-accent-rule hover:text-accent";
+  const primary =
+    "h-11 w-full rounded-md bg-accent-fill text-sm font-semibold text-on-accent transition-colors hover:bg-accent-fill-hover disabled:opacity-40";
+  const okText = "text-ok";
+  const errText = "text-danger";
 
   return (
-    <div className="max-w-md space-y-10">
-      <h1 className="text-xl font-bold tracking-tight">Settings</h1>
+    <div className="mx-auto max-w-xl">
+      <h1 className="mb-6 font-serif text-display font-semibold tracking-tight">Settings</h1>
 
-      <section>
-        <h2 className="mb-1 font-semibold">Sync</h2>
-        <p className="mb-4 text-sm text-zinc-500">
-          The app token you chose during setup. Worker URL is only needed when the app
-          isn't served by the worker itself (e.g. local dev).
-        </p>
-        <div className="space-y-3">
-          <div>
-            <label className={label}>Worker URL (optional)</label>
-            <input
-              value={workerUrl}
-              onChange={(e) => setWorkerUrl(e.target.value)}
-              placeholder="blank = this origin"
-              className={input}
-            />
-          </div>
-          <div>
-            <label className={label}>App token</label>
-            <input
-              value={appToken}
-              onChange={(e) => setAppToken(e.target.value)}
-              placeholder="app token"
-              type="password"
-              className={input}
-            />
-          </div>
-          <button
-            onClick={() => void onSync()}
-            disabled={syncing || !appToken.trim()}
-            className="w-full rounded-xl border border-accent-action-border bg-accent-action py-2.5 text-sm font-semibold text-accent-action-text shadow-sm transition-colors hover:bg-accent-action-hover disabled:opacity-40"
-          >
-            {syncing ? "Syncing…" : "Sync now"}
-          </button>
-          {syncResult && (
-            <p className={`text-sm ${syncResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
-              {syncResult.ok
-                ? `✓ pushed ${syncResult.pushedFiles} files, ${syncResult.pushedReviews} reviews · pulled ${syncResult.pulledFiles} files`
-                : `✗ ${syncResult.errors.join("; ") || "not configured or offline"}`}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-1 font-semibold">Algorithm</h2>
-        <p className="mb-4 text-sm text-zinc-500">
-          FSRS spaced repetition. Tune how much you want to remember vs. how often you review.
-        </p>
-        <div className="space-y-4">
-          <div>
-            <div className="mb-1 flex items-baseline justify-between">
-              <label className="text-xs font-medium text-zinc-500">Desired retention</label>
-              <span className="text-sm font-semibold tabular-nums">
-                {Math.round(retention * 100)}%
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0.8}
-              max={0.97}
-              step={0.01}
-              value={retention}
-              onChange={(e) => onRetentionChange(Number(e.target.value))}
-              className="w-full accent-accent-500"
-            />
-            <div className="flex justify-between text-[11px] text-zinc-400">
-              <span>fewer reviews</span>
-              <span>remember more</span>
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500">
-              New cards per day
-            </label>
-            <input
-              type="number"
-              min={0}
-              max={500}
-              value={newPerDay}
-              onChange={(e) => {
-                const v = Math.max(0, Math.min(500, Number(e.target.value) || 0));
-                setNewPerDay(v);
-                void kvSet("newPerDay", v);
-              }}
-              className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm shadow-sm outline-none focus:border-accent-500 dark:border-zinc-800 dark:bg-zinc-900/70"
-            />
-            <p className="mt-1 text-xs text-zinc-500">
-              Caps daily introductions — every new card becomes reviews due within days.
-            </p>
-          </div>
-
-          <div>
-            <button
-              onClick={() => void onOptimize()}
-              disabled={optimizing || reviewCount < OPTIMIZE_MIN_REVIEWS}
-              className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 text-sm font-semibold shadow-sm transition-colors hover:border-accent-400 disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-accent-600"
-            >
-              {optimizing
-                ? "Optimizing…"
-                : params?.weights
-                  ? "Re-optimize for me"
-                  : "Optimize for me"}
-            </button>
-            <p className="mt-1.5 text-xs text-zinc-500">
-              {reviewCount >= OPTIMIZE_MIN_REVIEWS
-                ? `Fits the scheduler to your ${reviewCount} logged reviews (runs on-device).`
-                : `Unlocks at ${OPTIMIZE_MIN_REVIEWS} reviews — ${reviewCount} logged so far. (More history, especially across days, gives a better fit.)`}
-              {params?.weights && " Currently using your personalized parameters."}
-            </p>
-          </div>
-
-          {algoMsg && (
-            <p className={`text-sm ${algoMsg.startsWith("✓") ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
-              {algoMsg}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-1 font-semibold">Appearance</h2>
-        <p className="mb-3 text-sm text-zinc-500">Choose the interface mode and accent color.</p>
-        <div className="inline-flex rounded-xl bg-zinc-200/70 p-1 dark:bg-zinc-800/80">
-          {(["system", "dark", "light"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => {
-                setTheme(t);
-                setThemeState(t);
-              }}
-              className={`rounded-lg px-4 py-1.5 text-sm capitalize transition-colors ${
-                theme === t
-                  ? "bg-white font-medium text-zinc-900 shadow-sm dark:bg-zinc-600 dark:text-zinc-50"
-                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {COLOR_THEMES.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={colorTheme === option.id}
-              onClick={() => {
-                setColorTheme(option.id);
-                setColorThemeState(option.id);
-              }}
-              className={`flex min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors sm:flex-col sm:items-start ${
-                colorTheme === option.id
-                  ? "border-accent-500 bg-accent-500/10"
-                  : "border-zinc-200 bg-white hover:border-accent-400 dark:border-zinc-800 dark:bg-zinc-900/70"
-              }`}
-            >
-              <span
-                className="size-4 shrink-0 rounded-full shadow-sm ring-1 ring-black/10"
-                style={{ backgroundColor: option.swatch }}
+      <div className="space-y-5">
+        <Section title="Sync" lede="The app token you chose during setup. Worker URL is only needed when the app isn't served by the worker itself (e.g. local dev).">
+          <div className="space-y-4">
+            <div>
+              <label className={label} htmlFor="worker-url">Worker URL (optional)</label>
+              <input
+                id="worker-url"
+                value={workerUrl}
+                onChange={(e) => setWorkerUrl(e.target.value)}
+                placeholder="blank = this origin"
+                className={input}
+                inputMode="url"
+                autoCapitalize="off"
+                autoCorrect="off"
               />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium">{option.label}</span>
-                <span className="block truncate text-[11px] text-zinc-500">{option.description}</span>
-              </span>
+            </div>
+            <div>
+              <label className={label} htmlFor="app-token">App token</label>
+              <input
+                id="app-token"
+                value={appToken}
+                onChange={(e) => setAppToken(e.target.value)}
+                placeholder="app token"
+                type="password"
+                autoComplete="off"
+                className={input}
+              />
+            </div>
+            <button onClick={() => void onSync()} disabled={syncing || !appToken.trim()} className={primary}>
+              {syncing ? "Syncing…" : "Save & sync now"}
             </button>
-          ))}
-        </div>
-      </section>
+            {syncResult && (
+              <div role="status" className={`text-sm ${syncResult.ok ? okText : errText}`}>
+                {syncResult.ok ? (
+                  `✓ Pushed ${syncResult.pushedFiles} files, ${syncResult.pushedReviews} reviews · pulled ${syncResult.pulledFiles} files`
+                ) : syncResult.errors.length > 0 ? (
+                  <>
+                    <p className="font-medium">Sync failed</p>
+                    <ul className="mt-1.5 space-y-1 rounded border border-hairline bg-sunken p-2.5">
+                      {syncResult.errors.map((err, i) => (
+                        <li key={i} className="break-words font-mono text-xs text-ink-2">{err}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  "✗ Not configured or offline"
+                )}
+              </div>
+            )}
+          </div>
+        </Section>
 
-      <section>
-        <h2 className="mb-1 font-semibold">Import from Anki</h2>
-        <p className="mb-3 text-sm text-zinc-500">
-          Decks, cards, images, and full review history from an .apkg export.
-          In Anki: File → Export → check “Support older Anki versions”.
-          Re-importing the same file is safe.
-        </p>
-        <label className={`inline-block cursor-pointer ${secondary} ${importing ? "pointer-events-none opacity-50" : ""}`}>
-          {importing ? "Importing…" : "Import .apkg"}
-          <input
-            type="file"
-            accept=".apkg,.colpkg"
-            className="hidden"
-            disabled={importing}
-            onChange={(e) => void onImportApkg(e)}
-          />
-        </label>
-        {importMsg && (
-          <p className={`mt-2 text-sm ${importMsg.startsWith("✗") ? "text-red-500" : "text-zinc-500"}`} role="status">
-            {importMsg}
-          </p>
-        )}
-      </section>
+        <Section title="Algorithm" lede="FSRS spaced repetition. Tune how much you want to remember vs. how often you review.">
+          <div className="space-y-6">
+            <div>
+              <div className="mb-1 flex items-baseline justify-between">
+                <label className="label-caps text-muted" htmlFor="retention">Desired retention</label>
+                <span className="text-lg font-semibold tabular-nums">{Math.round(retention * 100)}%</span>
+              </div>
+              <input
+                id="retention"
+                type="range"
+                min={0.8}
+                max={0.97}
+                step={0.01}
+                value={retention}
+                onChange={(e) => onRetentionChange(Number(e.target.value))}
+                className="h-10 w-full"
+              />
+              <div className="flex justify-between text-xs text-muted">
+                <span>fewer reviews</span>
+                <span>remember more</span>
+              </div>
+            </div>
 
-      <section>
-        <h2 className="mb-3 font-semibold">Backup</h2>
-        <div className="flex gap-2">
-          <button onClick={() => void onExport()} className={secondary}>
-            Export JSON
-          </button>
-          <label className={`cursor-pointer ${secondary}`}>
-            Import JSON
+            <div>
+              <label className={label} htmlFor="new-per-day">New cards per day</label>
+              <input
+                id="new-per-day"
+                type="number"
+                min={0}
+                max={500}
+                value={newPerDay}
+                onChange={(e) => {
+                  const v = Math.max(0, Math.min(500, Number(e.target.value) || 0));
+                  setNewPerDay(v);
+                  void kvSet("newPerDay", v);
+                }}
+                className={`${input} w-28 tabular-nums`}
+              />
+              <p className="mt-1.5 text-13 text-muted">
+                Caps daily introductions — every new card becomes reviews due within days.
+              </p>
+            </div>
+
+            <div>
+              <button
+                onClick={() => void onOptimize()}
+                disabled={optimizing || reviewCount < OPTIMIZE_MIN_REVIEWS}
+                className={`${secondary} h-11 w-full font-semibold disabled:pointer-events-none disabled:opacity-50`}
+              >
+                {optimizing
+                  ? "Optimizing…"
+                  : params?.weights
+                    ? "Re-optimize for me"
+                    : "Optimize for me"}
+              </button>
+              <p className="mt-1.5 text-13 text-muted">
+                {reviewCount >= OPTIMIZE_MIN_REVIEWS
+                  ? `Fits the scheduler to your ${reviewCount} logged reviews (runs on-device).`
+                  : `Unlocks at ${OPTIMIZE_MIN_REVIEWS} reviews — ${reviewCount} logged so far. (More history, especially across days, gives a better fit.)`}
+                {params?.weights && " Currently using your personalized parameters."}
+              </p>
+            </div>
+
+            {algoMsg && (
+              <p role="status" className={`text-sm ${algoMsg.startsWith("✓") ? okText : errText}`}>
+                {algoMsg}
+              </p>
+            )}
+          </div>
+        </Section>
+
+        <Section title="Appearance" lede="Interface mode and accent colour.">
+          <div className="inline-flex rounded-md border border-hairline bg-sunken p-0.5" role="radiogroup" aria-label="Mode">
+            {(["system", "light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                role="radio"
+                aria-checked={theme === t}
+                onClick={() => {
+                  setTheme(t);
+                  setThemeState(t);
+                }}
+                className={`h-10 rounded-[5px] px-4 text-sm capitalize sm:h-9 transition-colors ${
+                  theme === t ? "bg-paper font-semibold text-ink shadow-sm" : "text-muted hover:text-ink"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5" role="radiogroup" aria-label="Accent colour">
+            {COLOR_THEMES.map((option) => {
+              const active = colorTheme === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => {
+                    setColorTheme(option.id);
+                    setColorThemeState(option.id);
+                  }}
+                  style={{ "--sw": option.swatch, "--sw-dark": option.swatchDark } as React.CSSProperties}
+                  className={`group relative flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-card)] border bg-paper text-left transition-colors ${
+                    active ? "border-ink ring-1 ring-ink" : "border-hairline hover:border-hairline-strong"
+                  }`}
+                >
+                  {/* a miniature index card in the theme's colour */}
+                  <span className="block h-1 bg-[var(--sw)] dark:bg-[var(--sw-dark)]" aria-hidden />
+                  <span className="block px-2.5 pb-2.5 pt-2">
+                    <span className="mb-2 block space-y-1" aria-hidden>
+                      <span className="block h-[3px] w-3/4 rounded-full bg-[var(--sw)] opacity-80 dark:bg-[var(--sw-dark)]" />
+                      <span className="block h-[3px] w-full rounded-full bg-hairline" />
+                      <span className="block h-[3px] w-1/2 rounded-full bg-hairline" />
+                    </span>
+                    <span className="flex items-center justify-between gap-1">
+                      <span className="truncate text-13 font-semibold text-ink">{option.label}</span>
+                      {active && <IconCheck className="h-3.5 w-3.5 shrink-0 text-ink" />}
+                    </span>
+                    <span className="block truncate text-2xs text-muted">{option.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+
+        <Section
+          title="Import from Anki"
+          lede="Decks, cards, images, and full review history from an .apkg export. In Anki: File → Export → check “Support older Anki versions”. Re-importing the same file is safe."
+        >
+          <label className={`cursor-pointer ${secondary} ${importing ? "pointer-events-none opacity-50" : ""}`}>
+            {importing ? "Importing…" : "Import .apkg"}
             <input
               type="file"
-              accept="application/json"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void onImport(f);
-              }}
+              accept=".apkg,.colpkg"
+              className="sr-only"
+              disabled={importing}
+              onChange={(e) => void onImportApkg(e)}
             />
           </label>
-        </div>
-      </section>
+          {importMsg && (
+            <p className={`mt-3 text-sm ${importMsg.startsWith("✗") ? errText : "text-muted"}`} role="status">
+              {importMsg}
+            </p>
+          )}
+        </Section>
 
-      <section>
-        <h2 className="mb-1 font-semibold">Storage</h2>
-        <p className="mb-3 text-sm text-zinc-500">
-          If the app misbehaves after an update (stale version, sync weirdness), reset the
-          local copy. Cards and reviews live on the server — they re-download on next sync.
-        </p>
-        <button
-          onClick={() => void onClearStorage()}
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 shadow-sm transition-colors hover:border-red-400 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400 dark:hover:border-red-700"
+        <Section title="Backup" lede="A JSON snapshot of cards, scheduling state and unsynced reviews.">
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => void onExport()} className={secondary}>
+              Export JSON
+            </button>
+            <label className={`cursor-pointer ${secondary}`}>
+              Import JSON
+              <input
+                type="file"
+                accept="application/json"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void onImport(f);
+                }}
+              />
+            </label>
+          </div>
+        </Section>
+
+        <Section
+          title="Storage"
+          lede="If the app misbehaves after an update (stale version, sync weirdness), reset the local copy. Cards and reviews live on the server — they re-download on next sync."
         >
-          Clear local data & reload
-        </button>
-      </section>
+          <button
+            onClick={() => void onClearStorage()}
+            className="inline-flex h-10 items-center rounded-md border border-danger/40 bg-danger-soft px-4 text-sm font-medium text-danger transition-colors hover:border-danger"
+          >
+            Clear local data & reload
+          </button>
+        </Section>
+      </div>
     </div>
+  );
+}
+
+function Section({ title, lede, children }: { title: string; lede?: string; children: React.ReactNode }) {
+  return (
+    <section className="index-card p-5 sm:p-6">
+      <h2 className="font-serif text-lg font-semibold tracking-tight">{title}</h2>
+      {lede && <p className="mb-5 mt-1 text-13 leading-relaxed text-muted">{lede}</p>}
+      {children}
+    </section>
   );
 }

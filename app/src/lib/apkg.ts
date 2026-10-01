@@ -100,6 +100,8 @@ export async function importApkg(
     }
   }
   for (const [id, name] of rows("SELECT id, name FROM decks")) {
+    // Anki separates nested deck names with the \x1f unit separator.
+    // eslint-disable-next-line no-control-regex
     deckNames.set(Number(id), String(name).replace(/\x1f/g, "::"));
   }
 
