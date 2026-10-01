@@ -5,7 +5,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import { db } from "../lib/db";
-import { rehypeCardMeta, urlTransform } from "./markdown-plugins";
+import { rehypeCardMeta, rehypeSmartypants, urlTransform } from "./markdown-plugins";
 
 /**
  * Card markdown renderer: GFM + $math$ (KaTeX) + syntax-highlighted code.
@@ -31,7 +31,7 @@ export default function MarkdownInner({
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex, rehypeHighlight, rehypeCardMeta]}
+        rehypePlugins={[rehypeKatex, rehypeHighlight, rehypeSmartypants, rehypeCardMeta]}
         urlTransform={urlTransform}
         components={{ img: MediaImg }}
       >

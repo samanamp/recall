@@ -187,7 +187,7 @@ export default function Decks() {
               className="index-card index-card--ruled group flex min-h-[8.5rem] flex-col p-4 pt-3.5 sm:min-h-[9.5rem] transition-colors hover:border-hairline-strong hover:[border-top-color:var(--card-rule)]"
             >
               <div className="flex items-start gap-2">
-                <span className="min-w-0 flex-1 break-words font-serif text-[1.0625rem] font-semibold leading-snug">
+                <span className="min-w-0 flex-1 break-words font-serif text-[1.0625rem] font-bold leading-snug">
                   {deck.name}
                 </span>
                 <button
@@ -199,6 +199,8 @@ export default function Decks() {
                   <IconTrash />
                 </button>
               </div>
+
+              <DeckBar due={deck.due} fresh={deck.newCards} total={deck.total} />
 
               <div className="mt-auto flex items-end gap-6 pt-4">
                 {idle ? (
@@ -223,6 +225,18 @@ export default function Decks() {
         })}
         {newDeckTile}
       </div>
+    </div>
+  );
+}
+
+/** Where the deck stands: due, new, and the rest (scheduled for later). */
+function DeckBar({ due, fresh, total }: { due: number; fresh: number; total: number }) {
+  if (total === 0) return null;
+  const pct = (n: number) => `${(100 * n) / total}%`;
+  return (
+    <div className="mt-3 flex h-1 gap-px overflow-hidden rounded-full bg-hairline" aria-hidden>
+      {due > 0 && <div className="bg-accent" style={{ width: pct(due) }} />}
+      {fresh > 0 && <div className="bg-accent/35" style={{ width: pct(fresh) }} />}
     </div>
   );
 }

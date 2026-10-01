@@ -14,8 +14,8 @@
  * All text pairs below are ≥ 4.5:1 (WCAG AA) on desk, paper and sunken.
  */
 @theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-serif: "Literata Variable", Georgia, "Iowan Old Style", serif;
+  --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Charis SIL", Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 
   --color-desk: var(--desk);
@@ -235,7 +235,6 @@ body {
   font-family: var(--font-sans);
   background-color: var(--desk);
   color: var(--ink);
-  font-feature-settings: "cv11", "ss01"; /* Inter: single-storey a off, open digits */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -353,10 +352,9 @@ select:focus-visible {
 }
 }
 
-/* ─── Card typography (Literata) ─────────────────────────────────────────── */
+/* ─── Card typography (Charis SIL) ───────────────────────────────────────── */
 .card-type {
   font-family: var(--font-serif);
-  font-optical-sizing: auto;
   color: var(--ink);
   --tw-prose-body: var(--ink);
   --tw-prose-headings: var(--ink);
@@ -377,7 +375,7 @@ select:focus-visible {
   text-wrap: pretty;
 }
 .card-type :where(h1, h2, h3, h4, strong, th) {
-  font-weight: 620;
+  font-weight: 700;
 }
 .card-type :where(table) {
   font-family: var(--font-sans);
@@ -387,8 +385,7 @@ select:focus-visible {
 .card-front {
   font-size: 1.3rem;
   line-height: 1.4;
-  font-weight: 450;
-  letter-spacing: -0.005em;
+  font-weight: 400;
 }
 /* The answer: a comfortable ~65-character measure. */
 .card-back {

@@ -5,6 +5,7 @@ import { IconBrowse, IconTrash } from "../components/icons";
 import { deleteCard } from "../lib/actions";
 import { db } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
+import { smarten } from "../lib/typography";
 
 /** Rows rendered per step; more reveal as the sentinel scrolls into view. */
 const PAGE = 150;
@@ -150,8 +151,8 @@ export default function Browser() {
                 aria-hidden
               />
               <Link to={`/edit/${card.id}`} className="min-w-0 flex-1 py-3 pl-4">
-                <div className="truncate font-serif text-[0.9875rem] leading-snug text-ink">
-                  {previewLine(card.front)}
+                <div className="line-clamp-2 text-pretty font-serif text-[0.9875rem] leading-snug text-ink">
+                  {smarten(previewLine(card.front)).text}
                 </div>
                 <div className="mt-0.5 truncate text-xs text-muted">{card.deck}</div>
               </Link>
@@ -162,7 +163,7 @@ export default function Browser() {
                 className={`flex h-10 min-w-10 shrink-0 items-center justify-center rounded-md px-2 text-xs font-medium transition-colors sm:h-8 sm:px-2.5 ${
                   confirmId === card.id
                     ? "bg-danger-fill text-white"
-                    : "text-muted hover:bg-danger-soft hover:text-danger"
+                    : "text-muted hover:bg-danger-soft hover:text-danger sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
                 }`}
               >
                 {confirmId === card.id ? (

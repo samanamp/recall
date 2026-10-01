@@ -310,7 +310,7 @@ export default function Editor() {
           ) : (
             <p className="font-serif text-[1.25rem] italic text-faint">Front preview</p>
           )}
-          <div className="answer-rule label-caps -mr-5 mb-4 mt-6">Answer</div>
+          <div className="answer-rule label-caps mb-4 mt-6">Answer</div>
           {back ? (
             <Markdown text={back} className="card-back text-base!" />
           ) : (

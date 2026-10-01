@@ -216,7 +216,7 @@ export default function Review() {
             // tap anywhere on the card to reveal (unless selecting text)
             if (!revealed && !window.getSelection()?.toString()) setRevealed(true);
           }}
-          className={`index-card index-card--ruled card-stack min-h-[11rem] px-5 pb-7 pt-5 sm:min-h-[14rem] sm:px-12 sm:pb-11 sm:pt-8 ${
+          className={`index-card index-card--ruled card-stack flex min-h-[min(22rem,52dvh)] flex-col px-5 pb-6 pt-5 sm:min-h-[14rem] sm:px-12 sm:pb-11 sm:pt-8 ${
             revealed ? "" : "cursor-pointer"
           }`}
         >
@@ -232,6 +232,11 @@ export default function Review() {
               <div className="answer-rule label-caps mb-5 mt-7 sm:mb-6 sm:mt-9">Answer</div>
               <Markdown text={card.back} className="card-back" />
             </div>
+          )}
+          {!revealed && (
+            <p className="label-caps mt-auto pt-6 text-center text-muted sm:hidden" aria-hidden>
+              Tap to turn over
+            </p>
           )}
         </div>
       </div>
