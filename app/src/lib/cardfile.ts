@@ -7,6 +7,7 @@ import type { CardRow } from "./db";
  *   ---
  *   id: <ULID>
  *   created: <ISO date>
+ *   order: <sort key>      (optional; see `studyRank`)
  *   ---
  *   front markdown
  *   ---
@@ -18,6 +19,8 @@ export interface ParsedCard {
   created: string;
   front: string;
   back: string;
+  /** New-card study position, when it was pushed back (absent = by id). */
+  order?: string;
   /** False if the file had no id (hand-authored) and one was generated. */
   hadId: boolean;
 }
@@ -27,6 +30,7 @@ export function parseCardFile(text: string): ParsedCard {
   const lines = text.split("\n");
   let id = "";
   let created = "";
+  let order = "";
   let bodyStart = 0;
 
   if (lines[0]?.trim() === "---") {
@@ -36,6 +40,7 @@ export function parseCardFile(text: string): ParsedCard {
         const m = line.match(/^(\w+):\s*(.*)$/);
         if (m?.[1] === "id") id = m[2].trim();
         if (m?.[1] === "created") created = m[2].trim();
+        if (m?.[1] === "order") order = m[2].trim();
       }
       bodyStart = end + 1;
     }
@@ -51,6 +56,7 @@ export function parseCardFile(text: string): ParsedCard {
     created: created || new Date().toISOString().slice(0, 10),
     front,
     back,
+    ...(order ? { order } : {}),
     hadId: Boolean(id),
   };
 }
@@ -69,8 +75,9 @@ export function splitFrontBack(text: string): { front: string; back: string } {
   };
 }
 
-export function serializeCardFile(card: Pick<CardRow, "id" | "created" | "front" | "back">): string {
-  return `---\nid: ${card.id}\ncreated: ${card.created}\n---\n${card.front.trim()}\n---\n${card.back.trim()}\n`;
+export function serializeCardFile(card: Pick<CardRow, "id" | "created" | "front" | "back" | "order">): string {
+  const order = card.order ? `order: ${card.order}\n` : "";
+  return `---\nid: ${card.id}\ncreated: ${card.created}\n${order}---\n${card.front.trim()}\n---\n${card.back.trim()}\n`;
 }
 
 export function deckFromPath(path: string): string {

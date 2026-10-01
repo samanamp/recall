@@ -75,7 +75,11 @@ let b = Box::new(5);
 ​```
 ```
 
-- Frontmatter: `id` (ULID, required), `created` (date, informational).
+- Frontmatter: `id` (ULID, required), `created` (date, informational), and
+  `order` (optional). New cards are studied in `order ?? id` order, so by
+  creation time until a card is pushed back with "Show later": its `order`
+  becomes the study key of the card it now follows plus `~`, which sorts
+  just after that card. Delete the line to restore the default position.
 - The first `---` line after the frontmatter splits **front** from **back**.
   (Use `***` for horizontal rules inside card bodies.)
 - Images referenced relatively: `![](../../media/<id>.png)` — renders both in the

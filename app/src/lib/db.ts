@@ -10,6 +10,7 @@ export interface CardRow {
   front: string;
   back: string;
   created: string; // ISO date
+  order?: string; // new-card study position once pushed back (see studyRank)
 }
 
 export interface MediaRow {

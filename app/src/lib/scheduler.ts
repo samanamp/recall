@@ -135,14 +135,37 @@ export async function buildQueue(deck: string | null, now: Date): Promise<string
   const cards = await queueCards(deck);
   const states = await db.state.bulkGet(cards.map((c) => c.id));
   const due: { id: string; due: number }[] = [];
-  const fresh: string[] = [];
+  const fresh: CardRow[] = [];
   cards.forEach((card, i) => {
     const s = states[i];
-    if (!s) fresh.push(card.id);
+    if (!s) fresh.push(card);
     else if (s.due <= cutoff) due.push({ id: card.id, due: s.due });
   });
   due.sort((a, b) => a.due - b.due);
-  return [...due.map((d) => d.id), ...fresh.slice(0, budget)];
+  return [...due.map((d) => d.id), ...fresh.sort(byStudyRank).slice(0, budget).map((c) => c.id)];
+}
+
+/**
+ * Where a new card sits in study order: its `order` key once pushed back,
+ * else its id. ULIDs sort by creation time, and a pushed-back key is the id
+ * (or key) of the card it now follows plus "~", which sorts after that card
+ * and before the next one. Ties fall back to the id.
+ */
+export function studyRank(card: Pick<CardRow, "id" | "order">): string {
+  return card.order ?? card.id;
+}
+
+function byStudyRank(a: CardRow, b: CardRow): number {
+  const ra = studyRank(a);
+  const rb = studyRank(b);
+  return ra < rb ? -1 : ra > rb ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/** New (never-reviewed) cards in a session's scope, in study order. */
+export async function newCardsInOrder(deck: string | null): Promise<CardRow[]> {
+  const cards = await queueCards(deck);
+  const states = await db.state.bulkGet(cards.map((c) => c.id));
+  return cards.filter((_, i) => !states[i]).sort(byStudyRank);
 }
 
 /**

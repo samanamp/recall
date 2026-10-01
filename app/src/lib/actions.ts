@@ -12,7 +12,7 @@ import {
 } from "./db";
 import { contentHash, optimizeImage } from "./image";
 import { isReviewInFlight, isSyncing, requestSync } from "./sync";
-import { rateCard } from "./scheduler";
+import { newCardsInOrder, rateCard, studyRank } from "./scheduler";
 
 /**
  * User actions. Everything writes to IndexedDB immediately (instant UX) and
@@ -38,6 +38,7 @@ export async function saveCard(input: {
     // moving decks gets a new path + delete of the old one.
     path: existing && existing.deck === input.deck ? existing.path : "",
     sha: existing?.sha ?? null,
+    ...(existing?.order ? { order: existing.order } : {}),
   };
   if (!card.path) {
     card.path = cardPath(input.deck, card.id, input.front);
@@ -47,8 +48,14 @@ export async function saveCard(input: {
     }
   }
 
-  await db.cards.put(card);
   await ensureDeck(input.deck);
+  await writeCard(card);
+  return card;
+}
+
+/** Store a card locally and queue its file for the repo. */
+async function writeCard(card: CardRow): Promise<void> {
+  await db.cards.put(card);
   await db.pendingFiles.put({
     path: card.path,
     op: "put",
@@ -57,7 +64,44 @@ export async function saveCard(input: {
     queuedAt: Date.now(),
   });
   requestSync(500);
-  return card;
+}
+
+/** What `pushBack` changed, so it can be undone. */
+export interface PushBackUndo {
+  cardId: string;
+  previousOrder: string | undefined;
+}
+
+/** How far "show later" moves a new card in study order. */
+export const PUSH_BACK_BY = 20;
+
+/**
+ * Move a new card `by` places later among the new cards of `deck` (null = all
+ * decks), so it comes up after the next `by` new cards instead of now. Only
+ * new cards have a study order; returns null for a card already in review or
+ * one with nothing after it. The new key is written to the card file, so the
+ * move syncs to every device like an edit.
+ */
+export async function pushBack(cardId: string, deck: string | null, by = PUSH_BACK_BY): Promise<PushBackUndo | null> {
+  const card = await db.cards.get(cardId);
+  if (!card || (await db.state.get(cardId))) return null;
+  const order = await newCardsInOrder(deck);
+  const at = order.findIndex((c) => c.id === cardId);
+  const rest = order.filter((c) => c.id !== cardId);
+  if (at < 0 || at >= rest.length) return null; // already last
+  const after = rest[Math.min(at + by, rest.length) - 1];
+  const previousOrder = card.order;
+  await writeCard({ ...card, order: `${studyRank(after)}~` });
+  return { cardId, previousOrder };
+}
+
+/** Put a pushed-back card where it was. */
+export async function undoPushBack(undo: PushBackUndo): Promise<void> {
+  const card = await db.cards.get(undo.cardId);
+  if (!card) return;
+  const { order: _drop, ...rest } = card;
+  void _drop;
+  await writeCard(undo.previousOrder ? { ...rest, order: undo.previousOrder } : rest);
 }
 
 /** Register a deck without touching an existing row (it may be archived). */

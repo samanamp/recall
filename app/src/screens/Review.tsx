@@ -2,7 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Markdown from "../components/Markdown";
 import { MarkIllustration } from "../components/Mark";
-import { recordReview, undoReview, type ReviewUndo } from "../lib/actions";
+import {
+  PUSH_BACK_BY,
+  pushBack,
+  recordReview,
+  undoPushBack,
+  undoReview,
+  type PushBackUndo,
+  type ReviewUndo,
+} from "../lib/actions";
 import { db, type CardRow } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
 import { buildAheadQueue, buildQueue, previewIntervals } from "../lib/scheduler";
@@ -18,6 +26,9 @@ const RATINGS = [
 const kbd =
   "h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-[3px] border border-current/25 px-1 font-sans text-2xs font-semibold leading-none";
 
+/** One undoable step of a session: a rating, or a new card shown later. */
+type SessionUndo = { kind: "review"; undo: ReviewUndo } | { kind: "later"; undo: PushBackUndo };
+
 export default function Review() {
   const deckParam = useParams().deck;
   const deck = deckParam ? decodeURIComponent(deckParam) : null; // null = all decks
@@ -27,14 +38,21 @@ export default function Review() {
   const [intervals, setIntervals] = useState<Record<1 | 2 | 3 | 4, string> | null>(null);
   const [done, setDone] = useState(0);
   const [ahead, setAhead] = useState<string[]>([]);
-  const [undoStack, setUndoStack] = useState<ReviewUndo[]>([]);
+  const [undoStack, setUndoStack] = useState<SessionUndo[]>([]);
+  // New cards (never reviewed) can be pushed later in study order.
+  const [isNew, setIsNew] = useState(false);
   // One rating (or undo) at a time: a fast double tap/click or a held key
   // must never record two reviews for the same card.
   const busyRef = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [undoNote, setUndoNote] = useState(false);
-  const undoNoteTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(undoNoteTimer.current), []);
+  const [note, setNote] = useState<string | null>(null);
+  const noteTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(noteTimer.current), []);
+  const flash = useCallback((text: string) => {
+    setNote(text);
+    clearTimeout(noteTimer.current);
+    noteTimer.current = setTimeout(() => setNote(null), 4000);
+  }, []);
 
   const loadNext = useCallback(
     async (initial: string[]) => {
@@ -47,7 +65,9 @@ export default function Review() {
             setQueue(q);
             setCard(next);
             setRevealed(false);
-            setIntervals(previewIntervals(await db.state.get(next.id), new Date()));
+            const state = await db.state.get(next.id);
+            setIsNew(!state);
+            setIntervals(previewIntervals(state, new Date()));
             window.scrollTo({ top: 0 }); // long cards leave the page scrolled down
             return;
           }
@@ -86,42 +106,63 @@ export default function Review() {
       exclusive(async () => {
         if (!card || !queue) return;
         const undo = await recordReview(card.id, rating);
-        setUndoStack((s) => [...s.slice(-49), undo]);
+        setUndoStack((s) => [...s.slice(-49), { kind: "review", undo }]);
         setDone((d) => d + 1);
         await loadNext(queue.slice(1));
       }),
     [card, queue, loadNext, exclusive]
   );
 
-  /** Reverse the last rating and bring that card back, answer shown. */
+  /** Move this new card PUSH_BACK_BY places later in study order. */
+  const later = useCallback(
+    () =>
+      exclusive(async () => {
+        if (!card || !queue || !isNew) return;
+        const undo = await pushBack(card.id, deck);
+        if (!undo) {
+          flash("Already the last new card");
+          return;
+        }
+        setUndoStack((s) => [...s.slice(-49), { kind: "later", undo }]);
+        flash(`Moved ${PUSH_BACK_BY} cards later`);
+        await loadNext(queue.slice(1));
+      }),
+    [card, queue, isNew, deck, loadNext, exclusive, flash]
+  );
+
+  /** Reverse the last rating or "later" and bring that card back, answer shown. */
   const onUndo = useCallback(
     () =>
       exclusive(async () => {
-        const undo = undoStack[undoStack.length - 1];
-        if (!undo) return;
+        const step = undoStack[undoStack.length - 1];
+        if (!step) return;
         setUndoStack((s) => s.slice(0, -1));
-        // Newer sync engines report where the undo landed; "queued" = offline.
-        const res: unknown = await undoReview(undo);
-        if ((res as { status?: unknown } | undefined)?.status === "queued") {
-          setUndoNote(true);
-          clearTimeout(undoNoteTimer.current);
-          undoNoteTimer.current = setTimeout(() => setUndoNote(false), 4000);
+        if (step.kind === "later") {
+          await undoPushBack(step.undo);
+          setNote(null);
+        } else {
+          // Newer sync engines report where the undo landed; "queued" = offline.
+          const res: unknown = await undoReview(step.undo);
+          if ((res as { status?: unknown } | undefined)?.status === "queued") {
+            flash("Undone here — it syncs when you're back online");
+          }
+          setDone((d) => Math.max(0, d - 1));
         }
-        setDone((d) => Math.max(0, d - 1));
-        await loadNext([undo.cardId, ...(queue ?? [])]);
+        await loadNext([step.undo.cardId, ...(queue ?? [])]);
         setRevealed(true);
       }),
-    [undoStack, queue, loadNext, exclusive]
+    [undoStack, queue, loadNext, exclusive, flash]
   );
 
-  // Keyboard: space/enter reveals, 1-4 rates, z undoes. Held keys (auto-repeat)
+  // Keyboard: space/enter reveals, 1-4 rates, l shows a new card later, z undoes. Held keys (auto-repeat)
   // and modified keys (⌘1 switches browser tabs, ⌘Z is the editor's) are ignored.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key.toLowerCase();
-      const ours = key === "z" || key === " " || key === "enter" || ["1", "2", "3", "4"].includes(key);
+      const ours =
+        key === "z" || key === "l" || key === " " || key === "enter" || ["1", "2", "3", "4"].includes(key);
       if (!ours) return;
       if (e.repeat) {
         e.preventDefault();
@@ -130,6 +171,9 @@ export default function Review() {
       if (key === "z") {
         e.preventDefault();
         void onUndo();
+      } else if (key === "l") {
+        e.preventDefault();
+        void later();
       } else if (!revealed && (key === " " || key === "enter")) {
         e.preventDefault();
         setRevealed(true);
@@ -140,7 +184,7 @@ export default function Review() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [revealed, rate, onUndo]);
+  }, [revealed, rate, onUndo, later]);
 
   if (queue === null) return null;
 
@@ -173,7 +217,7 @@ export default function Review() {
               disabled={busy}
               className="inline-flex h-10 items-center px-3 text-13 text-muted hover:text-accent"
             >
-              ↩ Undo last rating
+              ↩ Undo last step
             </button>
           )}
           <Link to="/" className="inline-flex h-10 items-center px-3 text-sm font-medium text-accent hover:underline">
@@ -285,17 +329,30 @@ export default function Review() {
                 <span aria-hidden>·</span>
               </>
             )}
+            {isNew && (
+              <>
+                <button
+                  onClick={() => void later()}
+                  disabled={busy}
+                  title={`Show this new card after the next ${PUSH_BACK_BY} (L)`}
+                  className="inline-flex h-10 items-center px-2 hover:text-accent sm:h-8"
+                >
+                  Show later
+                </button>
+                <span aria-hidden>·</span>
+              </>
+            )}
             <Link to={`/edit/${card.id}`} className="inline-flex h-10 items-center px-2 hover:text-accent sm:h-8">
               Edit card
             </Link>
-            {undoNote ? (
+            {note ? (
               <>
                 <span aria-hidden>·</span>
-                <span role="status" className="px-2">Undone here — it syncs when you're back online</span>
+                <span role="status" className="px-2">{note}</span>
               </>
             ) : (
               <span className="hidden items-center sm:inline-flex" aria-hidden>
-                ·<span className="px-2">space reveal · 1–4 rate · z undo</span>
+                ·<span className="px-2">space reveal · 1–4 rate{isNew ? " · l later" : ""} · z undo</span>
               </span>
             )}
           </div>
