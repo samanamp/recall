@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "./lib/db";
-import { subscribeSync, syncAll, type SyncStatus } from "./lib/sync";
+import Mark from "./components/Mark";
+import SyncPill from "./components/SyncPill";
+import { IconAdd, IconBrowse, IconDecks, IconSettings, IconStats } from "./components/icons";
 import Decks from "./screens/Decks";
 import Review from "./screens/Review";
 import Editor from "./screens/Editor";
@@ -10,75 +9,48 @@ import Browser from "./screens/Browser";
 import Settings from "./screens/Settings";
 import Stats from "./screens/Stats";
 
+const TABS = [
+  { to: "/", label: "Decks", Icon: IconDecks, end: true },
+  { to: "/new", label: "Add", Icon: IconAdd },
+  { to: "/browse", label: "Browse", Icon: IconBrowse },
+  { to: "/stats", label: "Stats", Icon: IconStats },
+  { to: "/settings", label: "Settings", Icon: IconSettings },
+] as const;
+
 export default function App() {
-  const [sync, setSync] = useState<SyncStatus>({ syncing: false, last: null });
-  useEffect(() => subscribeSync(setSync), []);
-
-  const pendingCount = useLiveQuery(
-    async () => (await db.pendingFiles.count()) + (await db.pendingReviews.count()),
-    [],
-    0
-  );
-
-  const failed = sync.last !== null && !sync.last.ok && sync.last.errors.length > 0;
-
-  const tab = ({ isActive }: { isActive: boolean }) =>
-    `flex-1 py-3 text-center text-sm font-medium transition-colors sm:flex-none sm:rounded-full sm:px-3.5 sm:py-1.5 ${
+  // desktop: text tabs with an accent underline, like a card divider tab
+  const desktopTab = ({ isActive }: { isActive: boolean }) =>
+    `relative flex h-14 items-center px-3 text-sm font-medium transition-colors after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full ${
       isActive
-        ? "text-accent-600 dark:text-accent-400 sm:bg-accent-500/10"
-        : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+        ? "text-ink after:bg-accent-rule"
+        : "text-muted after:bg-transparent hover:text-ink"
+    }`;
+  // phone: icon + label, full-height tap targets
+  const mobileTab = ({ isActive }: { isActive: boolean }) =>
+    `flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-2xs font-medium transition-colors ${
+      isActive ? "text-accent" : "text-muted hover:text-ink"
     }`;
 
   return (
-    <div className="min-h-dvh bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <header className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50/90 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/90">
-        <div className="mx-auto flex max-w-3xl lg:max-w-4xl items-center gap-2 px-4 py-2">
-          <NavLink to="/" className="text-lg font-bold tracking-tight">
-            re<span className="text-accent-500">call</span>
+    <div className="min-h-dvh bg-desk text-ink">
+      <header className="sticky top-0 z-20 border-b border-hairline bg-desk/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-4xl items-center gap-2 px-4">
+          <NavLink to="/" className="-ml-1 flex items-center gap-2 rounded-md px-1 py-1 text-ink" aria-label="recall — decks">
+            <Mark className="h-6 w-6" />
+            <span className="font-serif text-[1.2rem] font-semibold leading-none tracking-[-0.01em]">recall</span>
           </NavLink>
-          {/* desktop nav */}
-          <nav className="ml-4 hidden gap-1 sm:flex">
-            <NavLink to="/" end className={tab}>Decks</NavLink>
-            <NavLink to="/new" className={tab}>Add</NavLink>
-            <NavLink to="/browse" className={tab}>Browse</NavLink>
-            <NavLink to="/stats" className={tab}>Stats</NavLink>
-            <NavLink to="/settings" className={tab}>Settings</NavLink>
+          <nav className="ml-6 hidden h-14 sm:flex" aria-label="Main">
+            {TABS.map(({ to, label, ...t }) => (
+              <NavLink key={to} to={to} end={"end" in t} className={desktopTab}>
+                {label}
+              </NavLink>
+            ))}
           </nav>
-          <button
-            onClick={() => void syncAll()}
-            disabled={sync.syncing}
-            title={failed ? sync.last?.errors.join("\n") : "Sync now"}
-            className={`ml-auto flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium shadow-sm transition-colors ${
-              failed
-                ? "border-red-300 bg-red-50 text-red-600 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400"
-                : "border-zinc-200 bg-white text-zinc-600 hover:border-accent-400 hover:text-accent-600 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:border-accent-600 dark:hover:text-accent-400"
-            }`}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={`h-4 w-4 ${sync.syncing ? "animate-spin" : ""}`}
-            >
-              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-              <path d="M21 3v6h-6" />
-            </svg>
-            <span className="hidden sm:inline">
-              {sync.syncing ? "Syncing…" : failed ? "Sync failed" : "Synced"}
-            </span>
-            {pendingCount > 0 && !sync.syncing && (
-              <span className="rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white">
-                {pendingCount}
-              </span>
-            )}
-          </button>
+          <SyncPill />
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl lg:max-w-4xl px-4 py-3 pb-20 sm:pb-8">
+      <main className="mx-auto max-w-4xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-5 sm:pb-12 sm:pt-8">
         <Routes>
           <Route path="/" element={<Decks />} />
           <Route path="/review" element={<Review />} />
@@ -91,13 +63,17 @@ export default function App() {
         </Routes>
       </main>
 
-      {/* mobile bottom tab bar */}
-      <nav className="fixed inset-x-0 bottom-0 z-10 flex border-t border-zinc-200 bg-zinc-50/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden dark:border-zinc-800/70 dark:bg-zinc-950/95">
-        <NavLink to="/" end className={tab}>Decks</NavLink>
-        <NavLink to="/new" className={tab}>Add</NavLink>
-        <NavLink to="/browse" className={tab}>Browse</NavLink>
-        <NavLink to="/stats" className={tab}>Stats</NavLink>
-        <NavLink to="/settings" className={tab}>Settings</NavLink>
+      {/* phone tab bar */}
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-hairline bg-desk/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md sm:hidden"
+      >
+        {TABS.map(({ to, label, Icon, ...t }) => (
+          <NavLink key={to} to={to} end={"end" in t} className={mobileTab}>
+            <Icon className="h-[1.375rem] w-[1.375rem]" />
+            {label}
+          </NavLink>
+        ))}
       </nav>
     </div>
   );

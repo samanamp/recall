@@ -17,6 +17,17 @@ async function save() {
   const workerUrl = $("url").value.trim().replace(/\/+$/, "");
   const appToken = $("token").value.trim();
   if (!workerUrl || !appToken) return show("Both fields are required.", "err");
+  let origin;
+  try {
+    origin = new URL(workerUrl).origin;
+  } catch {
+    return show("That worker URL isn't a valid URL.", "err");
+  }
+  // Host access for just your worker, asked for here (inside the click) rather
+  // than <all_urls> at install. The page itself needs none: the context menu
+  // grants activeTab. Declining still works — the worker allows extension
+  // origins via CORS — so it's a nice-to-have, not a requirement.
+  await chrome.permissions.request({ origins: [`${origin}/*`] }).catch(() => false);
   await chrome.storage.local.set({ workerUrl, appToken });
   show("Saved ✓", "ok");
 }

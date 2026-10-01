@@ -17,6 +17,7 @@ export interface ServerCardState {
   due: number;
   state: number;
   fsrs_json: string | null;
+  updated_at?: number; // epoch ms; the delta-sync watermark
 }
 
 export class ApiError extends Error {
@@ -69,17 +70,25 @@ export const api = {
    */
   sync: (
     reviews: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[],
-    cursor?: string
+    cursor?: string,
+    stateSince?: number
   ) =>
     request<{
       unchanged?: true;
       cursor: string;
+      // Omitted with `filesUnchanged` when the manifest version in our cursor
+      // is still current.
       files?: ManifestFile[];
+      filesUnchanged?: true;
+      // The whole card_state table, or with `stateIsDelta` only rows changed
+      // since `stateSince`; then `deletedState` lists rows removed since.
       state?: ServerCardState[];
+      stateIsDelta?: true;
+      deletedState?: string[];
       params?: FsrsParams;
       reviewCount: number;
       accepted: number;
-    }>("/sync", { method: "POST", body: JSON.stringify({ reviews, cursor }) }),
+    }>("/sync", { method: "POST", body: JSON.stringify({ reviews, cursor, delta: true, stateSince }) }),
 
   /** Undo: remove one review server-side; the worker re-derives card state. */
   deleteReview: (id: string) =>
@@ -88,11 +97,26 @@ export const api = {
       body: JSON.stringify({ id }),
     }),
 
-  putParams: (body: { retention?: number; weights?: number[] | null }) =>
-    request<{ ok: true; rescheduled: number }>("/params", {
-      method: "PUT",
-      body: JSON.stringify(body),
-    }),
+  /**
+   * Set FSRS params and reschedule every card. The worker works in pages to
+   * stay inside D1's per-request query budget: repeat the same body with the
+   * returned cursor until `done` (params only take effect on the last page).
+   * An older worker answers in one shot without `done`.
+   */
+  putParams: async (body: { retention?: number; weights?: number[] | null }) => {
+    let cursor: string | undefined;
+    for (;;) {
+      const page = await request<{ ok: true; rescheduled: number; done?: boolean; cursor?: string }>(
+        "/params",
+        { method: "PUT", body: JSON.stringify({ ...body, cursor }) }
+      );
+      if (page.done === false && page.cursor) {
+        cursor = page.cursor;
+        continue;
+      }
+      return { ok: true as const, rescheduled: page.rescheduled };
+    }
+  },
 
   stats: () =>
     request<{

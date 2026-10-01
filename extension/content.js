@@ -28,7 +28,9 @@
     if (host) close();
     host = document.createElement("div");
     host.id = "recall-overlay-host";
-    root = host.attachShadow({ mode: "open" });
+    // Closed: page scripts get null from host.shadowRoot, so they can't read
+    // your deck names or rewrite a card between preview and Save.
+    root = host.attachShadow({ mode: "closed" });
     root.innerHTML = TEMPLATE;
     document.documentElement.appendChild(host);
 
