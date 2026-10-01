@@ -44,7 +44,7 @@ Workers AI, free tier, no extra key), and every card is shown before it's saved.
 
 **1. Fork this repo.** → **[Fork](https://github.com/samanamp/recall/fork)**
 (Use *Fork*, not "Use this template" — a template can't pull future updates; a
-fork can, and that's what powers auto-updates below.)
+fork can, and that's how you pull updates below.)
 
 **2. Create a free Cloudflare account.** → [sign up](https://dash.cloudflare.com/sign-up)
 (This is where your copy runs.)
@@ -69,10 +69,9 @@ node tools/setup.mjs
 now**. On a phone, "Add to Home Screen" installs the app. A welcome deck takes
 it from there.
 
-## Auto-updates
+## Updates and auto-deploy
 
-**Your copy keeps itself current.** Flip this on once and you never deploy
-again — every week it pulls the latest from here and redeploys itself:
+**Every push to your fork's `main` redeploys it.** Set this up once:
 
 1. On your fork → **Actions** tab → enable workflows.
 2. **Settings → Secrets and variables → Actions** → add your Cloudflare
@@ -80,10 +79,15 @@ again — every week it pulls the latest from here and redeploys itself:
    [deploy.yml](.github/workflows/deploy.yml)). Your worker secrets stay on
    Cloudflare — they're never copied to GitHub.
 
-That's it. A weekly job fast-forwards your fork and redeploys, hands-off.
-Want an update *now*? Hit **Sync fork** on your repo, or **Run workflow** on
-the Actions page. Customizing? Keep changes on a branch — the auto-sync is
-fast-forward-only, so it leaves a diverged `main` alone and just redeploys it.
+To update, look over what changed upstream, then hit **Sync fork** on your
+repo: the push redeploys. Or use **Run workflow** on the Actions page and tick
+*Pull upstream first*.
+
+**Hands-off weekly updates are opt-in.** They deploy whatever is on upstream
+`main`, unreviewed, using your Cloudflare credentials, so they're off by
+default. To turn them on, add the repository variable `AUTO_UPDATE` = `true`.
+The sync is fast-forward-only: a diverged `main` (your own changes) is left
+alone and simply redeployed.
 
 <sub>GitHub pauses a fork's scheduled jobs after 60 days idle — it emails you, one click resumes. Prefer fully manual? `git pull upstream main && node tools/setup.mjs` re-runs safely.</sub>
 
