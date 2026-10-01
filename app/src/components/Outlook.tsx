@@ -54,16 +54,46 @@ const STAGES: { key: keyof Mix; label: string; tone: string }[] = [
   { key: "mature", label: "Mature", tone: "bg-accent-fill" },
 ];
 
+/**
+ * New → mature as one stacked bar, darkest where cards are best known. With
+ * `color` (a deck's hue) the steps are tints of it; otherwise the accent.
+ */
+export function MixBar({
+  mix,
+  total,
+  color,
+  className = "h-2",
+}: {
+  mix: Mix;
+  total: number;
+  color?: string;
+  className?: string;
+}) {
+  const tint = [30, 55, 78, 100];
+  return (
+    <div className={`flex gap-px overflow-hidden rounded-full bg-sunken ${className}`} aria-hidden>
+      {total > 0 &&
+        STAGES.map(({ key, tone }, i) =>
+          mix[key] > 0 ? (
+            <div
+              key={key}
+              className={color ? undefined : tone}
+              style={{
+                width: `${(100 * mix[key]) / total}%`,
+                backgroundColor: color ? `color-mix(in oklab, ${color} ${tint[i]}%, var(--paper))` : undefined,
+              }}
+            />
+          ) : null
+        )}
+    </div>
+  );
+}
+
 /** Where the collection stands, as one stacked bar and a legend with counts. */
 export function CollectionMix({ mix, total }: { mix: Mix; total: number }) {
   return (
     <div>
-      <div className="flex h-2 gap-px overflow-hidden rounded-full bg-sunken" aria-hidden>
-        {total > 0 &&
-          STAGES.map(({ key, tone }) =>
-            mix[key] > 0 ? <div key={key} className={tone} style={{ width: `${(100 * mix[key]) / total}%` }} /> : null
-          )}
-      </div>
+      <MixBar mix={mix} total={total} />
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
         {STAGES.map(({ key, label, tone }) => (
           <div key={key} className="flex items-center gap-2 text-13">

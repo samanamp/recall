@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { MarkIllustration } from "../components/Mark";
@@ -8,7 +8,8 @@ import { db, kvGet } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
 import { deckCounts, newBudget } from "../lib/scheduler";
 import { loadOutlook } from "../lib/outlook";
-import { CollectionMix, ForecastBars } from "../components/Outlook";
+import { CollectionMix, ForecastBars, MixBar } from "../components/Outlook";
+import type { Mix } from "../lib/outlook";
 
 export default function Decks() {
   const [adding, setAdding] = useState(false);
@@ -21,9 +22,7 @@ export default function Decks() {
     setAdding(false);
   }
 
-  async function onDelete(e: React.MouseEvent, deck: string, total: number) {
-    e.preventDefault(); // tile is a Link — don't navigate
-    e.stopPropagation();
+  async function onDelete(deck: string, total: number) {
     const what = total > 0 ? `"${deck}" and its ${total} card${total === 1 ? "" : "s"}` : `"${deck}"`;
     if (!confirm(`Delete ${what}?\n\nFiles are removed from your repo (git history keeps them recoverable).`)) {
       return;
@@ -190,53 +189,15 @@ export default function Decks() {
         )
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {decks.list.map((deck) => {
-          const idle = deck.due === 0 && deck.newCards === 0;
-          return (
-            <Link
-              key={deck.name}
-              to={`/review/${encodeURIComponent(deck.name)}`}
-              style={{ "--card-rule": deckColor(deck.name) } as React.CSSProperties}
-              className="index-card index-card--ruled group flex min-h-[8.5rem] flex-col p-4 pt-3.5 sm:min-h-[9.5rem] transition-colors hover:border-hairline-strong hover:[border-top-color:var(--card-rule)]"
-            >
-              <div className="flex items-start gap-2">
-                <span className="min-w-0 flex-1 break-words font-serif text-[1.0625rem] font-bold leading-snug">
-                  {deck.name}
-                </span>
-                <button
-                  onClick={(e) => void onDelete(e, deck.name, deck.total)}
-                  title="Delete deck"
-                  aria-label={`Delete deck ${deck.name}`}
-                  className="-mr-2 -mt-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-faint transition-all hover:bg-danger-soft hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                >
-                  <IconTrash />
-                </button>
-              </div>
-
-              <DeckBar due={deck.due} fresh={deck.newCards} total={deck.total} />
-
-              <div className="mt-auto flex items-end gap-6 pt-4">
-                {idle ? (
-                  <div>
-                    <div className="text-sm font-medium text-ink-2">Done for today</div>
-                    <div className="mt-0.5 text-xs text-muted">
-                      {deck.nextInDays !== undefined
-                        ? `Next review ${deck.nextInDays === 1 ? "tomorrow" : `in ${deck.nextInDays} days`}`
-                        : "Nothing scheduled"}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <Count n={deck.due} label="Due" strong />
-                    <Count n={deck.newCards} label="New" />
-                  </>
-                )}
-                <span className="ml-auto pb-0.5 text-xs tabular-nums text-muted">{plural(deck.total, "card")}</span>
-              </div>
-            </Link>
-          );
-        })}
+      <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2">
+        {decks.list.map((deck) => (
+          <DeckTile
+            key={deck.name}
+            deck={deck}
+            outlook={outlook?.byDeck.get(deck.name)}
+            onDelete={() => void onDelete(deck.name, deck.total)}
+          />
+        ))}
         {newDeckTile}
       </div>
       </div>
@@ -286,17 +247,172 @@ function TodayPanel({ due, fresh, nextInDays }: { due: number; fresh: number; ne
   );
 }
 
-/** Where the deck stands: due, new, and the rest (scheduled for later). */
-function DeckBar({ due, fresh, total }: { due: number; fresh: number; total: number }) {
-  if (total === 0) return null;
-  const pct = (n: number) => `${(100 * n) / total}%`;
+interface DeckSummary {
+  name: string;
+  due: number;
+  newCards: number;
+  total: number;
+  nextInDays?: number;
+}
+
+/**
+ * One deck as a small pile of index cards: the pile thickens while cards are
+ * waiting. The name opens the session (the whole tile is its hit area); the
+ * menu and Study button sit above that link.
+ */
+function DeckTile({
+  deck,
+  outlook,
+  onDelete,
+}: {
+  deck: DeckSummary;
+  outlook?: { forecast: number[]; mix: Mix };
+  onDelete: () => void;
+}) {
+  const waiting = deck.due + deck.newCards;
+  const minutes = Math.max(1, Math.round((deck.due * 10 + deck.newCards * 25) / 60));
+  const mature = outlook && deck.total > 0 ? Math.round((100 * outlook.mix.mature) / deck.total) : 0;
+  const tomorrow = outlook?.forecast[1] ?? 0;
+  const week = outlook?.forecast.slice(1, 8).reduce((a, n) => a + n, 0) ?? 0;
+  const href = `/review/${encodeURIComponent(deck.name)}`;
+
   return (
-    <div className="mt-3 flex h-1 gap-px overflow-hidden rounded-full bg-hairline" aria-hidden>
-      {due > 0 && <div className="bg-accent" style={{ width: pct(due) }} />}
-      {fresh > 0 && <div className="bg-accent/35" style={{ width: pct(fresh) }} />}
+    <div className="relative isolate">
+      <div
+        data-stack={waiting === 0 ? 0 : waiting < 15 ? 1 : 2}
+        style={{ "--card-rule": deckColor(deck.name) } as React.CSSProperties}
+        className={`index-card index-card--ruled card-stack group flex h-full flex-col p-4 pt-3.5 transition-colors hover:border-hairline-strong hover:[border-top-color:var(--card-rule)] sm:p-5 sm:pt-4 ${
+          waiting === 0 ? "bg-paper/70" : ""
+        }`}
+      >
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <Link
+              to={href}
+              className="break-words font-serif text-[1.125rem] font-bold leading-snug outline-none after:absolute after:inset-0 after:rounded-[var(--radius-card)] after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-accent-rule"
+            >
+              {deck.name}
+            </Link>
+            <p className="mt-0.5 text-13 tabular-nums text-muted">
+              {plural(deck.total, "card")}
+              {deck.total > 0 && ` · ${mature}% mature`}
+            </p>
+          </div>
+          <DeckMenu name={deck.name} onDelete={onDelete} />
+        </div>
+
+        {outlook && deck.total > 0 && <MixBar mix={outlook.mix} total={deck.total} color={deckColor(deck.name)} className="mt-4 h-1.5" />}
+
+        <div className="mt-auto flex items-end gap-5 pt-5">
+          {waiting > 0 ? (
+            <>
+              <Count n={deck.due} label="Due" strong />
+              <Count n={deck.newCards} label="New" />
+              <Link
+                to={href}
+                className="relative z-10 ml-auto flex h-10 items-center gap-2 rounded-md bg-accent-soft pl-4 pr-3 text-sm font-semibold text-accent transition-colors hover:bg-accent-fill hover:text-on-accent"
+              >
+                Study
+                <span className="text-xs font-medium tabular-nums opacity-80">{minutes} min</span>
+              </Link>
+            </>
+          ) : (
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ok-soft text-ok" aria-hidden>
+                <IconCheck />
+              </span>
+              <div>
+                <div className="text-sm font-medium text-ink-2">Done for today</div>
+                <div className="text-xs text-muted">
+                  {deck.nextInDays === undefined
+                    ? "Nothing scheduled"
+                    : `Next ${deck.nextInDays === 1 ? "tomorrow" : `in ${deck.nextInDays} days`}`}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {deck.total > 0 && (
+          <p className="mt-4 border-t border-dashed border-hairline pt-2.5 text-xs tabular-nums text-muted">
+            {week === 0
+              ? `Nothing ${waiting > 0 ? "more " : ""}due this week`
+              : `${week} ${waiting > 0 ? "more " : ""}due this week${tomorrow ? `, ${tomorrow} of them tomorrow` : ""}`}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
+
+/** Per-deck actions, kept out of the tile's way until asked for. */
+function DeckMenu({ name, onDelete }: { name: string; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+  const q = `?deck=${encodeURIComponent(name)}`;
+  const item = "flex h-9 w-full items-center px-3 text-left text-13 font-medium transition-colors";
+  return (
+    <div ref={ref} className="relative z-20 -mr-2 -mt-1">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label={`Actions for ${name}`}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-muted transition-colors hover:bg-sunken hover:text-ink"
+      >
+        <IconMore />
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-10 w-44 overflow-hidden rounded-md border border-hairline bg-paper py-1 shadow-lg">
+          <Link role="menuitem" to={`/new${q}`} className={`${item} text-ink-2 hover:bg-sunken hover:text-ink`}>
+            Add a card
+          </Link>
+          <Link role="menuitem" to={`/browse${q}`} className={`${item} text-ink-2 hover:bg-sunken hover:text-ink`}>
+            Browse cards
+          </Link>
+          <div className="my-1 border-t border-hairline" />
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+            className={`${item} gap-2 text-danger hover:bg-danger-soft`}
+          >
+            <IconTrash className="h-3.5 w-3.5" />
+            Delete deck
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const IconMore = () => (
+  <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden>
+    <circle cx="4.5" cy="10" r="1.5" />
+    <circle cx="10" cy="10" r="1.5" />
+    <circle cx="15.5" cy="10" r="1.5" />
+  </svg>
+);
+
+const IconCheck = () => (
+  <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M5 10.5l3.2 3.2L15 7" />
+  </svg>
+);
 
 function Count({ n, label, strong }: { n: number; label: string; strong?: boolean }) {
   return (

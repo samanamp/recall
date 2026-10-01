@@ -16,6 +16,8 @@ export interface Outlook {
   forecast: number[];
   mix: Mix;
   total: number;
+  /** The same, per deck (decks with no cards are absent). */
+  byDeck: Map<string, { forecast: number[]; mix: Mix }>;
 }
 
 /**
@@ -29,19 +31,28 @@ export async function loadOutlook(now: Date, days = 14): Promise<Outlook> {
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
   const forecast = new Array<number>(days).fill(0);
-  const mix: Mix = { new: 0, learning: 0, young: 0, mature: 0 };
+  const mix = emptyMix();
+  const byDeck = new Map<string, { forecast: number[]; mix: Mix }>();
 
   for (const card of cards) {
+    let deck = byDeck.get(card.deck);
+    if (!deck) byDeck.set(card.deck, (deck = { forecast: new Array<number>(days).fill(0), mix: emptyMix() }));
     const s = stateById.get(card.id);
-    if (!s) {
-      mix.new++;
-      continue;
-    }
-    mix[stage(s)]++;
+    const st = s ? stage(s) : "new";
+    mix[st]++;
+    deck.mix[st]++;
+    if (!s) continue;
     const day = Math.max(0, Math.floor((s.due - start.getTime()) / DAY));
-    if (day < days) forecast[day]++;
+    if (day < days) {
+      forecast[day]++;
+      deck.forecast[day]++;
+    }
   }
-  return { forecast, mix, total: cards.length };
+  return { forecast, mix, total: cards.length, byDeck };
+}
+
+function emptyMix(): Mix {
+  return { new: 0, learning: 0, young: 0, mature: 0 };
 }
 
 function stage(s: StateRow): Exclude<keyof Mix, "new"> {

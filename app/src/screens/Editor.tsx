@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import Markdown from "../components/Markdown";
 import { addMedia, deleteCard, saveCard } from "../lib/actions";
@@ -16,8 +16,10 @@ export default function Editor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [chosenDeck, setDeck] = useState("");
-  // New cards preselect the last deck used (once decks have loaded).
-  const [lastDeck] = useState(() => (id ? null : localStorage.getItem("lastDeck")));
+  // New cards preselect the deck they were opened from (`?deck=`), else the
+  // last deck used (once decks have loaded).
+  const [params] = useSearchParams();
+  const [lastDeck] = useState(() => (id ? null : params.get("deck") ?? localStorage.getItem("lastDeck")));
   // New-card drafts survive accidental navigation; edit mode loads from the card.
   const [text, setText] = useState(() => (id ? "" : localStorage.getItem("editorDraft") ?? ""));
   const [mobileTab, setMobileTab] = useState<"write" | "preview">("write");

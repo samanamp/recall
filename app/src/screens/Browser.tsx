@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Markdown from "../components/Markdown";
 import { useLiveQuery } from "dexie-react-hooks";
 import { IconBrowse, IconTrash } from "../components/icons";
@@ -13,7 +13,8 @@ const PAGE = 150;
 
 export default function Browser() {
   const [query, setQuery] = useState("");
-  const [deckFilter, setDeckFilter] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [deckFilter, setDeckFilter] = useState<string | null>(() => params.get("deck"));
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);

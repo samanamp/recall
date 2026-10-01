@@ -32,6 +32,8 @@ describe("loadOutlook", () => {
     expect(o.forecast.reduce((a, n) => a + n, 0)).toBe(3);
     expect(o.mix).toEqual({ new: 1, learning: 1, young: 1, mature: 2 });
     expect(o.total).toBe(5);
+    expect(o.byDeck.get("d")?.mix).toEqual(o.mix);
+    expect(o.byDeck.get("d")?.forecast).toEqual(o.forecast);
   });
 
   it("treats unreadable state as young rather than guessing", async () => {
