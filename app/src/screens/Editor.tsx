@@ -15,7 +15,9 @@ import { toggleMarker } from "../lib/markdown-edit";
 export default function Editor() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [deck, setDeck] = useState("");
+  const [chosenDeck, setDeck] = useState("");
+  // New cards preselect the last deck used (once decks have loaded).
+  const [lastDeck] = useState(() => (id ? null : localStorage.getItem("lastDeck")));
   // New-card drafts survive accidental navigation; edit mode loads from the card.
   const [text, setText] = useState(() => (id ? "" : localStorage.getItem("editorDraft") ?? ""));
   const [mobileTab, setMobileTab] = useState<"write" | "preview">("write");
@@ -48,12 +50,7 @@ export default function Editor() {
     if (!id) localStorage.setItem("editorDraft", text);
   }, [id, text]);
 
-  // Preselect the last deck cards were added to, once decks have loaded.
-  useEffect(() => {
-    if (id || deck) return;
-    const last = localStorage.getItem("lastDeck");
-    if (last && decks.includes(last)) setDeck(last);
-  }, [id, deck, decks]);
+  const deck = chosenDeck || (lastDeck && decks.includes(lastDeck) ? lastDeck : "");
 
   const { front, back } = splitFrontBack(text);
 
@@ -136,26 +133,33 @@ export default function Editor() {
   const valid = deck.trim() !== "" && front !== "";
   const needsDeck = deck.trim() === "" && text.trim() !== "";
 
+  const chip = (active: boolean) =>
+    `flex h-10 shrink-0 items-center gap-1.5 rounded-full sm:h-9 border px-3.5 text-13 font-medium transition-colors ${
+      active
+        ? "border-accent-rule bg-accent-soft text-accent"
+        : "border-hairline bg-paper text-ink-2 hover:border-hairline-strong hover:text-ink"
+    }`;
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <h1 className="text-xl font-bold tracking-tight">{id ? "Edit card" : "New card"}</h1>
-        <div className="ml-auto flex items-center gap-2">
+        <h1 className="font-serif text-display font-semibold tracking-tight">{id ? "Edit card" : "New card"}</h1>
+        <div className="ml-auto flex items-center gap-1">
           {id && !confirmDelete && (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="rounded-md px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+              className="h-10 rounded-md px-3 text-sm font-medium text-muted transition-colors hover:bg-danger-soft hover:text-danger"
             >
-              delete
+              Delete
             </button>
           )}
           <button
             onClick={() => void onSave()}
             disabled={(!valid || saving) && !justAdded}
-            className={`rounded-xl px-5 py-1.5 text-sm font-semibold shadow-sm transition-colors disabled:opacity-40 ${
+            className={`h-10 rounded-md px-5 text-sm font-semibold transition-colors disabled:opacity-40 ${
               justAdded
-                ? "bg-emerald-600 text-white"
-                : "border border-accent-action-border bg-accent-action text-accent-action-text hover:bg-accent-action-hover"
+                ? "bg-ok-soft text-ok ring-1 ring-ok/40"
+                : "bg-accent-fill text-on-accent hover:bg-accent-fill-hover"
             }`}
           >
             {justAdded ? "Added ✓" : id ? "Save" : "Add card"}
@@ -164,8 +168,12 @@ export default function Editor() {
       </div>
 
       {id && confirmDelete && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900 dark:bg-red-950/40">
-          <span className="text-sm text-red-700 dark:text-red-300">
+        <div
+          role="alertdialog"
+          aria-label="Delete this card?"
+          className="flex flex-wrap items-center gap-3 rounded-md border border-danger/30 bg-danger-soft px-4 py-3"
+        >
+          <span className="text-sm text-danger">
             Delete this card and its review history? The file stays in git history, but the app
             can’t undo this.
           </span>
@@ -173,14 +181,14 @@ export default function Editor() {
             <button
               onClick={() => setConfirmDelete(false)}
               disabled={deleting}
-              className="rounded-lg px-3 py-1.5 text-sm text-zinc-600 transition-colors hover:bg-white disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-zinc-900"
+              className="h-10 rounded-md px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-paper disabled:opacity-40"
             >
               Cancel
             </button>
             <button
               onClick={() => void onDelete()}
               disabled={deleting}
-              className="rounded-lg bg-red-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-40"
+              className="h-10 rounded-md bg-danger-fill px-4 text-sm font-semibold text-white transition-colors hover:brightness-110 disabled:opacity-40"
             >
               {deleting ? "Deleting…" : "Delete card"}
             </button>
@@ -189,75 +197,71 @@ export default function Editor() {
       )}
 
       {/* deck picker: chips beat a datalist, especially on mobile */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {[...new Set(deck && !decks.includes(deck) ? [...decks, deck] : decks)].map((d) => (
-          <button
-            key={d}
-            aria-pressed={deck === d}
-            onClick={() => {
-              setDeck(d);
-              setNewDeckMode(false);
-            }}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
-              deck === d
-                ? "border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300"
-                : `border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300 ${
-                    deck ? "opacity-60 hover:opacity-100" : ""
-                  }`
-            }`}
-          >
-            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: deckColor(d) }} />
-            {d}
-          </button>
-        ))}
-        {newDeckMode ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const name = newDeckName.trim();
-              if (name) setDeck(name);
-              setNewDeckMode(false);
-              setNewDeckName("");
-            }}
-          >
-            <input
-              autoFocus
-              value={newDeckName}
-              onChange={(e) => setNewDeckName(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setNewDeckMode(false)}
-              onBlur={() => setNewDeckMode(false)}
-              placeholder="deck name ⏎"
-              className="w-32 rounded-full border border-accent-500 bg-white px-3 py-1 text-xs outline-none dark:bg-zinc-900"
-            />
-          </form>
-        ) : (
-          <button
-            onClick={() => setNewDeckMode(true)}
-            className={`rounded-full border border-dashed border-zinc-300 px-3 py-1 text-xs text-zinc-400 transition hover:border-accent-400 hover:text-accent-500 dark:border-zinc-700 ${
-              deck ? "opacity-60 hover:opacity-100" : ""
-            }`}
-          >
-            + new deck
-          </button>
-        )}
+      <div>
+        <div className="label-caps mb-2 text-muted">Deck</div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[...new Set(deck && !decks.includes(deck) ? [...decks, deck] : decks)].map((d) => (
+            <button
+              key={d}
+              aria-pressed={deck === d}
+              onClick={() => {
+                setDeck(d);
+                setNewDeckMode(false);
+              }}
+              className={chip(deck === d)}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: deckColor(d) }} aria-hidden />
+              {d}
+            </button>
+          ))}
+          {newDeckMode ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const name = newDeckName.trim();
+                if (name) setDeck(name);
+                setNewDeckMode(false);
+                setNewDeckName("");
+              }}
+            >
+              <input
+                autoFocus
+                value={newDeckName}
+                onChange={(e) => setNewDeckName(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setNewDeckMode(false)}
+                onBlur={() => setNewDeckMode(false)}
+                placeholder="deck name ⏎"
+                aria-label="New deck name"
+                className="h-10 w-36 rounded-full sm:h-9 border border-accent-rule bg-paper px-3.5 text-13 outline-none placeholder:text-faint"
+              />
+            </form>
+          ) : (
+            <button
+              onClick={() => setNewDeckMode(true)}
+              className="flex h-10 items-center rounded-full border border-dashed sm:h-9 border-hairline-strong px-3.5 text-13 font-medium text-muted transition-colors hover:border-accent-rule hover:text-accent"
+            >
+              + New deck
+            </button>
+          )}
+        </div>
       </div>
 
       {needsDeck && (
-        <p role="status" className="text-xs font-medium text-amber-600 dark:text-amber-400">
+        <p role="status" className="text-13 font-medium text-warn">
           Pick a deck above — the card can't be saved without one.
         </p>
       )}
 
       {/* mobile: write/preview tabs */}
-      <div className="flex gap-1 sm:hidden">
+      <div className="inline-flex self-start rounded-md border border-hairline bg-sunken p-0.5 sm:hidden" role="tablist">
         {(["write", "preview"] as const).map((t) => (
           <button
             key={t}
+            role="tab"
+            aria-selected={mobileTab === t}
             onClick={() => setMobileTab(t)}
-            className={`rounded-lg px-3 py-1 text-sm capitalize ${
-              mobileTab === t
-                ? "bg-zinc-200 dark:bg-zinc-800"
-                : "text-zinc-500"
+            className={`h-10 rounded-[5px] px-4 text-sm font-medium capitalize sm:h-9 ${
+              mobileTab === t ? "bg-paper text-ink shadow-sm" : "text-muted"
             }`}
           >
             {t}
@@ -265,12 +269,14 @@ export default function Editor() {
         ))}
       </div>
 
-      <div className="hidden grid-cols-2 gap-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 sm:grid">
-        <span>Write — front, ---, back · ⌘B bold · ⌘I italic · ⌘⏎ save</span>
-        <span>Preview</span>
+      <div className="hidden grid-cols-2 gap-4 sm:grid">
+        <span className="label-caps text-muted">
+          Write <span className="font-medium normal-case tracking-normal text-faint">· front, ---, back · ⌘B bold · ⌘I italic · ⌘⏎ save</span>
+        </span>
+        <span className="label-caps text-muted">Preview</span>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <textarea
           ref={textareaRef}
           value={text}
@@ -288,21 +294,28 @@ export default function Editor() {
           placeholder={
             "Front of the card (markdown, $math$, ```code```)…\n---\nBack of the card. Paste or drop images directly."
           }
+          aria-label="Card markdown: front, a --- line, then back"
           spellCheck={false}
-          className={`min-h-[50dvh] w-full resize-y rounded-xl border bg-white p-3 font-mono text-sm shadow-sm outline-none focus:border-accent-500 dark:bg-zinc-900/70 ${
-            dragging
-              ? "border-accent-500 ring-2 ring-accent-500/30"
-              : "border-zinc-200 dark:border-zinc-800"
+          className={`min-h-[50dvh] w-full resize-y rounded-md border bg-paper p-4 font-mono text-[0.8125rem] leading-relaxed text-ink outline-none placeholder:text-faint focus:border-accent-rule ${
+            dragging ? "border-accent-rule ring-2 ring-accent-rule/30" : "border-hairline"
           } ${mobileTab === "preview" ? "hidden sm:block" : ""}`}
         />
         <div
-          className={`min-h-[50dvh] overflow-auto rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70 ${
+          className={`index-card index-card--ruled min-h-[50dvh] overflow-auto px-5 pb-6 pt-5 ${
             mobileTab === "write" ? "hidden sm:block" : ""
           }`}
         >
-          <Markdown text={front || "*front preview*"} />
-          <hr className="my-3 border-dashed border-zinc-300 dark:border-zinc-700" />
-          <Markdown text={back || "*back preview*"} />
+          {front ? (
+            <Markdown text={front} className="card-front text-[1.25rem]!" />
+          ) : (
+            <p className="font-serif text-[1.25rem] italic text-faint">Front preview</p>
+          )}
+          <div className="answer-rule label-caps -mr-5 mb-4 mt-6">Answer</div>
+          {back ? (
+            <Markdown text={back} className="card-back text-base!" />
+          ) : (
+            <p className="font-serif italic text-faint">Back preview</p>
+          )}
         </div>
       </div>
     </div>
