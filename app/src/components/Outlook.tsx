@@ -4,7 +4,8 @@ const DAY = 86_400_000;
 
 /**
  * Daily due counts as columns, today first. Every column is labelled with its
- * count and day of month, so the chart can be read without a y-axis.
+ * count and weekday initial (Mondays stand out, marking the weeks), so the
+ * chart can be read without a y-axis; the full date is in the tooltip.
  */
 export function ForecastBars({ forecast, now }: { forecast: number[]; now: Date }) {
   const max = Math.max(1, ...forecast);
@@ -37,8 +38,8 @@ export function ForecastBars({ forecast, now }: { forecast: number[]; now: Date 
         {forecast.map((_, i) => {
           const d = new Date(now.getTime() + i * DAY);
           return (
-            <span key={i} className={i === 0 ? "font-semibold text-accent" : d.getDay() === 1 ? "text-ink-2" : ""}>
-              {d.getDate()}
+            <span key={i} className={i === 0 ? "font-semibold text-accent" : d.getDay() === 1 ? "font-semibold text-ink" : ""}>
+              {d.toLocaleDateString(undefined, { weekday: "narrow" })}
             </span>
           );
         })}

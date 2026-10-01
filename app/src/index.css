@@ -210,15 +210,19 @@
 
 :root {
   --accent-soft: color-mix(in oklab, var(--accent-rule) 12%, var(--paper));
-  /* deck palette: six steps rotating around the accent hue (lib/deck-color.ts) */
+  /* deck palette: eight hues spaced evenly round the wheel from the accent, at
+     one lightness and chroma so they sit together but can be told apart
+     (lib/deck-color.ts). Neighbouring slots are opposite hues. */
   --deck-l: 0.6;
   --deck-c: 0.13;
   --deck-0: oklch(var(--deck-l) var(--deck-c) var(--accent-h));
-  --deck-1: oklch(calc(var(--deck-l) + 0.09) calc(var(--deck-c) - 0.02) calc(var(--accent-h) + 22));
-  --deck-2: oklch(calc(var(--deck-l) - 0.08) var(--deck-c) calc(var(--accent-h) - 22));
-  --deck-3: oklch(calc(var(--deck-l) + 0.04) calc(var(--deck-c) - 0.01) calc(var(--accent-h) + 44));
-  --deck-4: oklch(calc(var(--deck-l) - 0.03) calc(var(--deck-c) - 0.02) calc(var(--accent-h) - 44));
-  --deck-5: oklch(calc(var(--deck-l) + 0.12) calc(var(--deck-c) - 0.04) calc(var(--accent-h) + 66));
+  --deck-1: oklch(var(--deck-l) var(--deck-c) calc(var(--accent-h) + 180));
+  --deck-2: oklch(var(--deck-l) var(--deck-c) calc(var(--accent-h) + 90));
+  --deck-3: oklch(var(--deck-l) var(--deck-c) calc(var(--accent-h) + 270));
+  --deck-4: oklch(var(--deck-l) var(--deck-c) calc(var(--accent-h) + 45));
+  --deck-5: oklch(var(--deck-l) var(--deck-c) calc(var(--accent-h) + 225));
+  --deck-6: oklch(var(--deck-l) var(--deck-c) calc(var(--accent-h) + 135));
+  --deck-7: oklch(var(--deck-l) var(--deck-c) calc(var(--accent-h) + 315));
 }
 .dark {
   --accent-soft: color-mix(in oklab, var(--accent-rule) 16%, var(--paper));

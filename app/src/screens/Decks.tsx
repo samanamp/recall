@@ -55,13 +55,18 @@ export default function Decks() {
         name,
         ...c,
         newCards: Math.min(c.newCards, budget),
+        newAvailable: c.newCards,
         total: totals.get(name) ?? 0,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     // Archived decks sit out: no tile, and nothing of theirs in today's totals.
+    const list = all.filter((d) => !archived.has(d.name));
     return {
       budget,
-      list: all.filter((d) => !archived.has(d.name)),
+      list,
+      // Work first: decks with cards waiting get tiles, the rest a quiet row.
+      waiting: list.filter((d) => d.due + d.newCards > 0),
+      idle: list.filter((d) => d.due + d.newCards === 0),
       archived: all.filter((d) => archived.has(d.name)),
     };
   }, []);
@@ -78,10 +83,8 @@ export default function Decks() {
 
   const totalCards = decks.list.reduce((n, d) => n + d.total, 0);
   const totalDue = decks.list.reduce((n, d) => n + d.due, 0);
-  const totalNew = Math.min(
-    decks.budget,
-    decks.list.reduce((n, d) => n + d.newCards, 0)
-  );
+  const newAvailable = decks.list.reduce((n, d) => n + d.newAvailable, 0);
+  const totalNew = Math.min(decks.budget, newAvailable);
 
   const newDeckTile = adding ? (
     <form
@@ -89,7 +92,7 @@ export default function Decks() {
         e.preventDefault();
         void onCreate();
       }}
-      className="index-card flex flex-wrap items-center gap-3 border-accent-rule p-3 pl-4 sm:col-span-2"
+      className="index-card flex flex-wrap items-center gap-3 border-accent-rule p-3 pl-4"
     >
       <label className="label-caps shrink-0 text-muted" htmlFor="new-deck-name">
         New deck
@@ -123,7 +126,7 @@ export default function Decks() {
   ) : (
     <button
       onClick={() => setAdding(true)}
-      className="flex h-12 items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed sm:col-span-2 border-hairline-strong text-sm font-medium text-muted transition-colors hover:border-accent-rule hover:bg-paper/60 hover:text-accent"
+      className="flex h-12 w-full items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-hairline-strong text-sm font-medium text-muted transition-colors hover:border-accent-rule hover:bg-paper/60 hover:text-accent"
     >
       <span className="text-lg leading-none" aria-hidden>+</span>
       New deck
@@ -134,7 +137,7 @@ export default function Decks() {
     <div className="grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
       <aside className="space-y-4 lg:sticky lg:top-[5.5rem] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
         {configured && totalCards > 0 && (
-          <TodayPanel due={totalDue} fresh={totalNew} nextInDays={nextInDays} />
+          <TodayPanel due={totalDue} fresh={totalNew} limited={newAvailable > totalNew} nextInDays={nextInDays} />
         )}
         {outlook && outlook.total > 0 && (
           <>
@@ -197,18 +200,42 @@ export default function Decks() {
         )
       )}
 
-      <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2">
-        {decks.list.map((deck) => (
-          <DeckTile
-            key={deck.name}
-            deck={deck}
-            outlook={outlook?.byDeck.get(deck.name)}
-            onArchive={() => void setDeckArchived(deck.name, true)}
-            onDelete={() => void onDelete(deck.name, deck.total)}
-          />
-        ))}
-        {newDeckTile}
-      </div>
+      {decks.waiting.length > 0 && (
+        <div className="mb-8 grid gap-x-4 gap-y-6 sm:grid-cols-2">
+          {decks.waiting.map((deck) => (
+            <DeckTile
+              key={deck.name}
+              deck={deck}
+              outlook={outlook?.byDeck.get(deck.name)}
+              onArchive={() => void setDeckArchived(deck.name, true)}
+              onDelete={() => void onDelete(deck.name, deck.total)}
+            />
+          ))}
+        </div>
+      )}
+
+      {decks.idle.length > 0 && (
+        // Own stacking context: an open row menu may hang over what follows,
+        // but stays under the sticky header (z-20).
+        <section className="relative z-10 mb-6" aria-labelledby="idle-decks">
+          <h2 id="idle-decks" className="label-caps mb-2 flex justify-between text-muted">
+            Nothing due today <span className="tabular-nums">{decks.idle.length}</span>
+          </h2>
+          <ul className="index-card divide-y divide-hairline">
+            {decks.idle.map((deck) => (
+              <IdleDeckRow
+                key={deck.name}
+                deck={deck}
+                mix={outlook?.byDeck.get(deck.name)?.mix}
+                onArchive={() => void setDeckArchived(deck.name, true)}
+                onDelete={() => void onDelete(deck.name, deck.total)}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {newDeckTile}
 
       {decks.archived.length > 0 && (
         <section className="mt-10" aria-labelledby="archived-decks">
@@ -254,7 +281,18 @@ export default function Decks() {
 }
 
 /** The day's job in one card: how much, how long, and the button to start. */
-function TodayPanel({ due, fresh, nextInDays }: { due: number; fresh: number; nextInDays?: number }) {
+function TodayPanel({
+  due,
+  fresh,
+  limited,
+  nextInDays,
+}: {
+  due: number;
+  fresh: number;
+  /** More new cards exist than today's limit lets through. */
+  limited: boolean;
+  nextInDays?: number;
+}) {
   const n = due + fresh;
   // rough pace: a review takes ~10s, a first look at a new card ~25s
   const minutes = Math.max(1, Math.round((due * 10 + fresh * 25) / 60));
@@ -272,7 +310,7 @@ function TodayPanel({ due, fresh, nextInDays }: { due: number; fresh: number; ne
             <span className="text-sm text-ink-2">{n === 1 ? "card" : "cards"} to study</span>
           </div>
           <p className="mt-2 text-13 tabular-nums text-muted">
-            {due} due · {fresh} new · about {minutes} min
+            {due} due · {fresh} new{limited && " (daily limit)"} · ~{minutes} min
           </p>
           <Link
             to="/review"
@@ -298,15 +336,18 @@ function TodayPanel({ due, fresh, nextInDays }: { due: number; fresh: number; ne
 interface DeckSummary {
   name: string;
   due: number;
+  /** New cards a session would serve today (capped by the daily limit). */
   newCards: number;
+  /** Every new card in the deck, limit or not. */
+  newAvailable: number;
   total: number;
   nextInDays?: number;
 }
 
 /**
- * One deck as a small pile of index cards: the pile thickens while cards are
- * waiting. The name opens the session (the whole tile is its hit area); the
- * menu and Study button sit above that link.
+ * A deck with cards waiting, as a small pile of index cards: the pile thickens
+ * with the backlog. The name opens the session (the whole tile is its hit
+ * area); the menu and Study button sit above that link.
  */
 function DeckTile({
   deck,
@@ -329,11 +370,9 @@ function DeckTile({
   return (
     <div className="relative isolate">
       <div
-        data-stack={waiting === 0 ? 0 : waiting < 15 ? 1 : 2}
+        data-stack={waiting < 15 ? 1 : 2}
         style={{ "--card-rule": deckColor(deck.name) } as React.CSSProperties}
-        className={`index-card index-card--ruled card-stack group flex h-full flex-col p-4 pt-3.5 transition-colors hover:border-hairline-strong hover:[border-top-color:var(--card-rule)] sm:p-5 sm:pt-4 ${
-          waiting === 0 ? "bg-paper/70" : ""
-        }`}
+        className="index-card index-card--ruled card-stack group flex h-full flex-col p-4 pt-3.5 transition-colors hover:border-hairline-strong hover:[border-top-color:var(--card-rule)] sm:p-5 sm:pt-4"
       >
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
@@ -348,50 +387,89 @@ function DeckTile({
               {deck.total > 0 && ` · ${mature}% mature`}
             </p>
           </div>
-          <DeckMenu name={deck.name} onArchive={onArchive} onDelete={onDelete} />
+          <DeckMenu name={deck.name} onArchive={onArchive} onDelete={onDelete} className="-mr-2 -mt-1" />
         </div>
 
         {outlook && deck.total > 0 && <MixBar mix={outlook.mix} total={deck.total} color={deckColor(deck.name)} className="mt-4 h-1.5" />}
 
         <div className="mt-auto flex items-end gap-5 pt-5">
-          {waiting > 0 ? (
-            <>
-              <Count n={deck.due} label="Due" strong />
-              <Count n={deck.newCards} label="New" />
-              <Link
-                to={href}
-                className="relative z-10 ml-auto flex h-10 items-center gap-2 rounded-md bg-accent-soft pl-4 pr-3 text-sm font-semibold text-accent transition-colors hover:bg-accent-fill hover:text-on-accent"
-              >
-                Study
-                <span className="text-xs font-medium tabular-nums opacity-80">{minutes} min</span>
-              </Link>
-            </>
-          ) : (
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ok-soft text-ok" aria-hidden>
-                <IconCheck />
-              </span>
-              <div>
-                <div className="text-sm font-medium text-ink-2">Done for today</div>
-                <div className="text-xs text-muted">
-                  {deck.nextInDays === undefined
-                    ? "Nothing scheduled"
-                    : `Next ${deck.nextInDays === 1 ? "tomorrow" : `in ${deck.nextInDays} days`}`}
-                </div>
-              </div>
-            </div>
-          )}
+          <Count n={deck.due} label="Due" strong />
+          <Count n={deck.newCards} label="New" />
+          <Link
+            to={href}
+            className="relative z-10 ml-auto flex h-10 items-center gap-2 rounded-md bg-accent-soft pl-4 pr-3 text-sm font-semibold text-accent transition-colors hover:bg-accent-fill hover:text-on-accent"
+          >
+            Study
+            <span className="text-xs font-medium tabular-nums opacity-80">{minutes} min</span>
+          </Link>
         </div>
 
-        {deck.total > 0 && (
-          <p className="mt-4 border-t border-dashed border-hairline pt-2.5 text-xs tabular-nums text-muted">
-            {week === 0
-              ? `Nothing ${waiting > 0 ? "more " : ""}due this week`
-              : `${week} ${waiting > 0 ? "more " : ""}due this week${tomorrow ? `, ${tomorrow} of them tomorrow` : ""}`}
-          </p>
-        )}
+        <p className="mt-4 border-t border-dashed border-hairline pt-2.5 text-xs tabular-nums text-muted">
+          {week === 0
+            ? "Nothing more due this week"
+            : `${week} more due this week${tomorrow ? `, ${tomorrow} of them tomorrow` : ""}`}
+        </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * A deck with nothing to study today, as one quiet line: when it comes back,
+ * or — for a deck without cards — the way to fill it.
+ */
+function IdleDeckRow({
+  deck,
+  mix,
+  onArchive,
+  onDelete,
+}: {
+  deck: DeckSummary;
+  mix?: Mix;
+  onArchive: () => void;
+  onDelete: () => void;
+}) {
+  const q = `?deck=${encodeURIComponent(deck.name)}`;
+  const empty = deck.total === 0;
+  const mature = mix && !empty ? Math.round((100 * mix.mature) / deck.total) : 0;
+  const status =
+    deck.nextInDays !== undefined
+      ? `Next ${deck.nextInDays === 1 ? "tomorrow" : `in ${deck.nextInDays} days`}`
+      : deck.newAvailable > 0
+        ? "Daily new-card limit reached"
+        : "Nothing scheduled";
+  return (
+    <li className="flex items-center gap-3 py-2 pl-4 pr-2">
+      <span
+        className="h-1.5 w-1.5 shrink-0 rounded-full"
+        style={{ backgroundColor: deckColor(deck.name) }}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <Link
+          to={empty ? `/new${q}` : `/review/${encodeURIComponent(deck.name)}`}
+          className="break-words font-serif font-bold leading-snug hover:text-accent"
+        >
+          {deck.name}
+        </Link>
+        <p className="text-13 tabular-nums text-muted">
+          {empty ? "No cards yet" : `${plural(deck.total, "card")} · ${mature}% mature`}
+          {/* phones: the status joins this line, leaving the name the full width */}
+          {!empty && <span className="sm:hidden"> · {status}</span>}
+        </p>
+      </div>
+      {empty ? (
+        <Link
+          to={`/new${q}`}
+          className="flex h-9 shrink-0 items-center rounded-md px-2.5 text-13 font-medium text-accent transition-colors hover:bg-accent-soft"
+        >
+          Add a card
+        </Link>
+      ) : (
+        <span className="hidden shrink-0 text-right text-13 tabular-nums text-muted sm:block">{status}</span>
+      )}
+      <DeckMenu name={deck.name} onArchive={onArchive} onDelete={onDelete} />
+    </li>
   );
 }
 
@@ -400,10 +478,12 @@ function DeckMenu({
   name,
   onArchive,
   onDelete,
+  className = "",
 }: {
   name: string;
   onArchive: () => void;
   onDelete: () => void;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -422,7 +502,7 @@ function DeckMenu({
   const q = `?deck=${encodeURIComponent(name)}`;
   const item = "flex h-9 w-full items-center px-3 text-left text-13 font-medium transition-colors";
   return (
-    <div ref={ref} className="relative z-20 -mr-2 -mt-1">
+    <div ref={ref} className={`relative shrink-0 ${open ? "z-30" : "z-20"} ${className}`}>
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label={`Actions for ${name}`}
@@ -473,12 +553,6 @@ const IconMore = () => (
     <circle cx="4.5" cy="10" r="1.5" />
     <circle cx="10" cy="10" r="1.5" />
     <circle cx="15.5" cy="10" r="1.5" />
-  </svg>
-);
-
-const IconCheck = () => (
-  <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M5 10.5l3.2 3.2L15 7" />
   </svg>
 );
 
