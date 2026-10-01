@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { restoreBackup, type Backup } from "../lib/actions";
 import { api, type FsrsParams } from "../lib/api";
 import { db, kvGet, kvSet } from "../lib/db";
 import { optimizeParameters } from "../lib/optimize";
 import { configureScheduler } from "../lib/scheduler";
-import { requestSync, syncAll, type SyncResult } from "../lib/sync";
+import { requestSync, stopSync, syncAll, type SyncResult } from "../lib/sync";
 import {
   COLOR_THEMES,
   getColorTheme,
@@ -133,10 +134,19 @@ export default function Settings() {
   }
 
   async function onImport(file: File) {
-    const backup = JSON.parse(await file.text());
-    await db.cards.bulkPut(backup.cards ?? []);
-    await db.state.bulkPut(backup.state ?? []);
-    alert(`Imported ${backup.cards?.length ?? 0} cards.`);
+    // Restores into the repo (cards it no longer has are re-committed), so it
+    // needs the server; see restoreBackup for what is and isn't overwritten.
+    try {
+      const r = await restoreBackup(JSON.parse(await file.text()) as Backup);
+      alert(
+        `Restored ${r.restoredCards} card(s) to your repo` +
+          (r.skippedCards ? `; ${r.skippedCards} already present, left unchanged` : "") +
+          (r.reviews ? `; re-queued ${r.reviews} unsynced review(s)` : "") +
+          "."
+      );
+    } catch (err) {
+      alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /**
@@ -144,7 +154,10 @@ export default function Settings() {
    * caches, keep credentials, reload → fresh build + full re-sync.
    */
   async function onClearStorage() {
-    const pending = (await db.pendingFiles.count()) + (await db.pendingReviews.count());
+    const pending =
+      (await db.pendingFiles.count()) +
+      (await db.pendingReviews.count()) +
+      (await db.pendingUndos.count());
     const warn =
       pending > 0 ? `\n\n⚠️ ${pending} unsynced change(s) will be LOST.` : "";
     if (
@@ -160,12 +173,17 @@ export default function Settings() {
       const v = await kvGet(key);
       if (v !== undefined) keep.push([key, v]);
     }
+    // An in-flight sync could otherwise write its cursor (or seed the welcome
+    // deck) into the freshly wiped database. This stops syncing until the
+    // reload below and makes any late write from the old sync a no-op.
+    await stopSync();
     await Promise.all([
       db.cards.clear(),
       db.media.clear(),
       db.state.clear(),
       db.pendingFiles.clear(),
       db.pendingReviews.clear(),
+      db.pendingUndos.clear(),
       db.decks.clear(),
       db.kv.clear(),
     ]);

@@ -45,6 +45,18 @@ export interface PendingFile {
   queuedAt: number;
 }
 
+/**
+ * Undo of a review that already left the device (or was in flight when the
+ * user hit undo). Sync sends `DELETE /reviews` for each before pushing new
+ * reviews; until then the card counts as dirty so server state can't
+ * clobber the locally restored state.
+ */
+export interface PendingUndo {
+  reviewId: string;
+  cardId: string;
+  queuedAt: number;
+}
+
 /** Deck registry — lets decks exist before they contain cards. */
 export interface DeckRow {
   name: string;
@@ -62,6 +74,7 @@ export const db = new Dexie("recall") as Dexie & {
   pendingReviews: EntityTable<PendingReview, "id">;
   pendingFiles: EntityTable<PendingFile, "path">;
   decks: EntityTable<DeckRow, "name">;
+  pendingUndos: EntityTable<PendingUndo, "reviewId">;
   kv: EntityTable<KVRow, "key">;
 };
 
@@ -78,12 +91,20 @@ db.version(2).stores({
   decks: "name",
 });
 
+db.version(3).stores({
+  pendingUndos: "reviewId, cardId",
+});
+
 export async function kvGet<T>(key: string): Promise<T | undefined> {
   return (await db.kv.get(key))?.value as T | undefined;
 }
 
 export async function kvSet(key: string, value: unknown): Promise<void> {
   await db.kv.put({ key, value });
+}
+
+export async function kvDelete(key: string): Promise<void> {
+  await db.kv.delete(key);
 }
 
 export interface Settings {
