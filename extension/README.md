@@ -49,5 +49,9 @@ content script never sees it. Nothing is sent anywhere except your own worker.
 
 - It can't run on `chrome://` pages, the Chrome Web Store, or some PDF viewers
   (the browser blocks content scripts there) — use it on normal web pages.
-- `host_permissions` is broad (`<all_urls>`) because your worker URL is
-  yours to choose; the extension only ever calls that one origin.
+- No blanket host access. Right-clicking the menu item grants the extension
+  the current tab only (`activeTab`), and Save in settings asks for access to
+  your worker's origin alone (optional; the worker also allows extension
+  origins via CORS). The extension only ever calls that one origin.
+- The preview panel is a closed shadow root, so the page's own scripts can't
+  read your deck names or alter a card before you save it.

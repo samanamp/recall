@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Highlight text on any page and turn it into a spaced-repetition flashcard in your recall deck.",
   "permissions": ["contextMenus", "storage", "scripting", "activeTab"],
-  "host_permissions": ["<all_urls>"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": { "service_worker": "background.js" },
   "options_page": "options.html",
   "action": {
