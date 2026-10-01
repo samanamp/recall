@@ -55,6 +55,16 @@ export interface SyncResult {
   errors: string[];
 }
 
+/**
+ * Bump whenever this code starts reading something new out of the manifest
+ * (e.g. the `.archived` deck markers). A cursor saved by an older build says
+ * "you already mirror this manifest" — true for what that build understood,
+ * not for what this one does — so it is ignored once, forcing a full pull.
+ * Without this, a device that synced on a stale cached build right after a
+ * deploy never picked the new data up until the repo next changed.
+ */
+export const MIRROR_VERSION = 1;
+
 /** The worker rejects review batches larger than this. */
 const REVIEW_BATCH = 500;
 
@@ -235,7 +245,9 @@ async function runSync(): Promise<SyncResult> {
     // No cards locally ⇒ the mirror was wiped or never filled: ask for
     // everything rather than risk an "unchanged" answer.
     const lastCursor =
-      (await db.cards.count()) > 0 ? await kvGet<string>("syncCursor") : undefined;
+      (await db.cards.count()) > 0 && (await kvGet<number>("mirrorVersion")) === MIRROR_VERSION
+        ? await kvGet<string>("syncCursor")
+        : undefined;
     // The state watermark is only meaningful alongside a valid cursor: both
     // are saved together, after a fully applied response.
     const stateSince = lastCursor ? await kvGet<number>("stateWatermark") : undefined;
@@ -272,6 +284,7 @@ async function runSync(): Promise<SyncResult> {
           ...resp.state!.map((r) => r.updated_at ?? 0)
         );
         await kvSet("stateWatermark", watermark);
+        await kvSet("mirrorVersion", MIRROR_VERSION);
         await kvSet("syncCursor", resp.cursor);
       }
     }

@@ -201,6 +201,19 @@ describe("archived decks", () => {
     expect((await db.decks.get("a"))?.archived).toBeFalsy();
   });
 
+  it("a cursor saved by a build that ignored markers doesn't hide them from this one", async () => {
+    server.write(`decks/a/${ID_X}.md`, file(ID_X, "x"));
+    server.write("decks/a/.archived", "");
+    await syncAll();
+    // What an older build left behind: the cursor is current, the flag unset.
+    await db.decks.put({ name: "a" });
+    await db.kv.delete("mirrorVersion");
+
+    await syncAll();
+    expect(await db.decks.get("a")).toMatchObject({ archived: true });
+    expect(await kvGet("syncCursor")).toBe(server.cursor());
+  });
+
   it("saving a card into an archived deck leaves it archived", async () => {
     await setDeckArchived("a", true);
     await saveCard({ deck: "a", front: "q", back: "a" });
