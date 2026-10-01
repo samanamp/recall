@@ -118,13 +118,24 @@ const putSecret = (name, value) => {
 };
 
 step("App token (what your devices use to log in)");
+// The token is the only thing between the internet and your cards repo, and
+// the worker URL is guessable — so a chosen token must be at least as strong
+// as the generated one (24 random bytes ≈ 192 bits; 32 chars is the floor).
+const MIN_TOKEN_LENGTH = 32;
+async function askToken(question) {
+  for (;;) {
+    const v = await ask(question);
+    if (!v || v.length >= MIN_TOKEN_LENGTH) return v;
+    console.log(`Too short: use at least ${MIN_TOKEN_LENGTH} random characters, or leave blank.`);
+  }
+}
 let appToken = null;
 if (existing.includes("APP_TOKEN")) {
   console.log("APP_TOKEN already set — keeping it (enter a value below to rotate).");
-  const v = await ask("New app token (blank = keep)");
+  const v = await askToken("New app token (blank = keep)");
   if (v) putSecret("APP_TOKEN", (appToken = v));
 } else {
-  appToken = (await ask("App token (blank = generate one)")) || randomBytes(24).toString("base64url");
+  appToken = (await askToken("App token (blank = generate one)")) || randomBytes(24).toString("base64url");
   putSecret("APP_TOKEN", appToken);
 }
 
