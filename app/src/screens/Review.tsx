@@ -39,7 +39,7 @@ export default function Review() {
   const [done, setDone] = useState(0);
   const [ahead, setAhead] = useState<string[]>([]);
   const [undoStack, setUndoStack] = useState<SessionUndo[]>([]);
-  // New cards (never reviewed) can be pushed later in study order.
+  // "Show later" moves a new card; a card in review restarts as new.
   const [isNew, setIsNew] = useState(false);
   // One rating (or undo) at a time: a fast double tap/click or a held key
   // must never record two reviews for the same card.
@@ -113,21 +113,25 @@ export default function Review() {
     [card, queue, loadNext, exclusive]
   );
 
-  /** Move this new card PUSH_BACK_BY places later in study order. */
+  /** Show this card PUSH_BACK_BY new cards from now (see pushBack). */
   const later = useCallback(
     () =>
       exclusive(async () => {
-        if (!card || !queue || !isNew) return;
+        if (!card || !queue) return;
         const undo = await pushBack(card.id, deck);
         if (!undo) {
           flash("Already the last new card");
           return;
         }
         setUndoStack((s) => [...s.slice(-49), { kind: "later", undo }]);
-        flash(`Moved ${PUSH_BACK_BY} cards later`);
+        flash(
+          undo.kind === "reset"
+            ? `Restarted as a new card, ${PUSH_BACK_BY} cards from now`
+            : `Moved ${PUSH_BACK_BY} cards later`
+        );
         await loadNext(queue.slice(1));
       }),
-    [card, queue, isNew, deck, loadNext, exclusive, flash]
+    [card, queue, deck, loadNext, exclusive, flash]
   );
 
   /** Reverse the last rating or "later" and bring that card back, answer shown. */
@@ -329,19 +333,19 @@ export default function Review() {
                 <span aria-hidden>·</span>
               </>
             )}
-            {isNew && (
-              <>
-                <button
-                  onClick={() => void later()}
-                  disabled={busy}
-                  title={`Show this new card after the next ${PUSH_BACK_BY} (L)`}
-                  className="inline-flex h-10 items-center px-2 hover:text-accent sm:h-8"
-                >
-                  Show later
-                </button>
-                <span aria-hidden>·</span>
-              </>
-            )}
+            <button
+              onClick={() => void later()}
+              disabled={busy}
+              title={
+                isNew
+                  ? `Show this card after the next ${PUSH_BACK_BY} new cards (L)`
+                  : `Restart this card as new, after the next ${PUSH_BACK_BY} new cards (L)`
+              }
+              className="inline-flex h-10 items-center px-2 hover:text-accent sm:h-8"
+            >
+              Show later
+            </button>
+            <span aria-hidden>·</span>
             <Link to={`/edit/${card.id}`} className="inline-flex h-10 items-center px-2 hover:text-accent sm:h-8">
               Edit card
             </Link>
@@ -352,7 +356,7 @@ export default function Review() {
               </>
             ) : (
               <span className="hidden items-center sm:inline-flex" aria-hidden>
-                ·<span className="px-2">space reveal · 1–4 rate{isNew ? " · l later" : ""} · z undo</span>
+                ·<span className="px-2">space reveal · 1–4 rate · l later · z undo</span>
               </span>
             )}
           </div>

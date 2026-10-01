@@ -80,6 +80,9 @@ let b = Box::new(5);
   creation time until a card is pushed back with "Show later": its `order`
   becomes the study key of the card it now follows plus `~`, which sorts
   just after that card. Delete the line to restore the default position.
+  "Show later" on a card already in review restarts it: the file is deleted
+  and a copy with a new id (so: a new card) is created after the next 20 new
+  cards. The old id's reviews stay in D1, which is what lets undo restore it.
 - The first `---` line after the frontmatter splits **front** from **back**.
   (Use `***` for horizontal rules inside card bodies.)
 - Images referenced relatively: `![](../../media/<id>.png)` — renders both in the

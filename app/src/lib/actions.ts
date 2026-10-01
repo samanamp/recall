@@ -66,37 +66,70 @@ async function writeCard(card: CardRow): Promise<void> {
   requestSync(500);
 }
 
-/** What `pushBack` changed, so it can be undone. */
-export interface PushBackUndo {
-  cardId: string;
-  previousOrder: string | undefined;
-}
+/** What `pushBack` changed, so it can be undone. `cardId` is the card undo brings back. */
+export type PushBackUndo =
+  | { kind: "moved"; cardId: string; previousOrder: string | undefined }
+  | { kind: "reset"; cardId: string; copyId: string; original: CardRow; originalState: StateRow };
 
-/** How far "show later" moves a new card in study order. */
+/** How far "show later" moves a card in study order. */
 export const PUSH_BACK_BY = 20;
 
 /**
- * Move a new card `by` places later among the new cards of `deck` (null = all
- * decks), so it comes up after the next `by` new cards instead of now. Only
- * new cards have a study order; returns null for a card already in review or
- * one with nothing after it. The new key is written to the card file, so the
- * move syncs to every device like an edit.
+ * "Show later": put a card `by` places later among the new cards of `deck`
+ * (null = all decks).
+ *
+ * - A new card moves after the next `by` new cards (or last, if fewer are
+ *   left); returns null when it is already last.
+ * - A card in review has an FSRS schedule, not a place in line, so it is
+ *   replaced: the card is deleted and a fresh copy (new id, so it starts as
+ *   new) is created after the first `by` new cards. Its review history stays
+ *   on the server under the old id, which is what lets undo restore it.
+ *
+ * Positions are written to the card files, so they sync like edits.
  */
 export async function pushBack(cardId: string, deck: string | null, by = PUSH_BACK_BY): Promise<PushBackUndo | null> {
   const card = await db.cards.get(cardId);
-  if (!card || (await db.state.get(cardId))) return null;
+  if (!card) return null;
   const order = await newCardsInOrder(deck);
+  const state = await db.state.get(cardId);
+
+  if (state) {
+    const id = ulid();
+    const copy: CardRow = {
+      id,
+      deck: card.deck,
+      front: card.front,
+      back: card.back,
+      created: new Date().toISOString().slice(0, 10),
+      path: cardPath(card.deck, id, card.front),
+      sha: null,
+      // A fresh ULID already sorts after every existing card, so with fewer
+      // than `by` new cards left it needs no key to go last.
+      ...(order.length >= by ? { order: `${studyRank(order[by - 1])}~` } : {}),
+    };
+    await deleteCard(cardId);
+    await writeCard(copy);
+    return { kind: "reset", cardId, copyId: id, original: card, originalState: state };
+  }
+
   const at = order.findIndex((c) => c.id === cardId);
   const rest = order.filter((c) => c.id !== cardId);
   if (at < 0 || at >= rest.length) return null; // already last
   const after = rest[Math.min(at + by, rest.length) - 1];
-  const previousOrder = card.order;
   await writeCard({ ...card, order: `${studyRank(after)}~` });
-  return { cardId, previousOrder };
+  return { kind: "moved", cardId, previousOrder: card.order };
 }
 
-/** Put a pushed-back card where it was. */
+/** Undo `pushBack`: the card goes back where it was, with its schedule. */
 export async function undoPushBack(undo: PushBackUndo): Promise<void> {
+  if (undo.kind === "reset") {
+    await deleteCard(undo.copyId);
+    // Re-putting the original path replaces its queued delete; if the delete
+    // already reached the repo, the push recreates the file.
+    await db.state.put(undo.originalState);
+    await writeCard(undo.original);
+    return;
+  }
   const card = await db.cards.get(undo.cardId);
   if (!card) return;
   const { order: _drop, ...rest } = card;
