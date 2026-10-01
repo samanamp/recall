@@ -16,9 +16,38 @@ export function slugify(text: string): string {
   );
 }
 
-/** Sanitize a deck name to a safe folder (mirrors actions.ts createDeck). */
+/**
+ * Turn a free-text deck name into a safe folder path: per `/` segment, spaces
+ * become `-` and only letters, digits, `-` and `_` survive, so `.`/`..` and
+ * empty segments vanish. A deny-list (stripping "..") missed things like
+ * "a/./b" or "a//b".
+ */
 export function sanitizeDeck(name: string): string {
-  return (name ?? "").trim().replace(/\.\./g, "").replace(/^\/+|\/+$/g, "");
+  return (typeof name === "string" ? name : "")
+    .split("/")
+    .map((seg) => seg.trim().replace(/\s+/g, "-").replace(/[^\p{L}\p{N}_-]/gu, ""))
+    .filter((seg) => seg !== "")
+    .join("/");
+}
+
+/** Deck folders present in a manifest: "decks/a/b/x.md" → "a/b". */
+export function deckFolders(paths: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const p of paths) {
+    const m = p.match(/^decks\/(.+)\/[^/]+$/);
+    if (m) out.add(m[1]);
+  }
+  return out;
+}
+
+/**
+ * The app allows deck names sanitizeDeck would rewrite ("Machine Learning").
+ * A name that matches an existing folder exactly is used as-is, so the
+ * extension still saves into that deck instead of forking a look-alike one.
+ */
+export function resolveDeck(name: string, existing: Set<string>): string {
+  const trimmed = (typeof name === "string" ? name : "").trim().replace(/^\/+|\/+$/g, "");
+  return existing.has(trimmed) ? trimmed : sanitizeDeck(trimmed);
 }
 
 export function cardPath(deck: string, id: string, front: string): string {

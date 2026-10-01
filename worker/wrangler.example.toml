@@ -30,6 +30,10 @@ GITHUB_REPO = "__CARDS_REPO__"
 GITHUB_BRANCH = "__CARDS_BRANCH__"
 # Flashcard model (default: llama-3.3-70b-instruct-fp8-fast). For cheaper/faster:
 # AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8"
+# Cross-origin callers allowed by CORS, comma-separated. Not needed when the
+# app is served by this worker (same origin); localhost dev servers and the
+# browser extension are always allowed. Example for an app hosted on Pages:
+# ALLOWED_ORIGINS = "https://recall.pages.dev"
 
 # Secrets (set with `npx wrangler secret put <NAME>`):
 #   APP_TOKEN     - shared secret your devices use to talk to this worker

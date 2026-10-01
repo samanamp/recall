@@ -39,9 +39,14 @@ const CARDS: { front: string; back: string }[] = [
   },
 ];
 
-export async function maybeSeedWelcome(): Promise<void> {
+/**
+ * `remoteHasCards` must come from a full manifest fetched by the sync that
+ * calls this; the caller skips seeding when the repo's contents are unknown.
+ */
+export async function maybeSeedWelcome(remoteHasCards: boolean): Promise<void> {
   if (await kvGet<boolean>("welcomeSeeded")) return;
-  const existing = (await db.cards.count()) > 0 || (await db.pendingFiles.count()) > 0;
+  const existing =
+    remoteHasCards || (await db.cards.count()) > 0 || (await db.pendingFiles.count()) > 0;
   await kvSet("welcomeSeeded", true);
   if (existing) return;
   for (const c of CARDS) await saveCard({ deck: "welcome", ...c });
