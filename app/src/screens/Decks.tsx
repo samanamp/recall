@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { MarkIllustration } from "../components/Mark";
 import { IconTrash } from "../components/icons";
-import { createDeck, deleteDeck } from "../lib/actions";
-import { db, kvGet } from "../lib/db";
+import { createDeck, deleteDeck, setDeckArchived } from "../lib/actions";
+import { archivedDecks, db, kvGet } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
 import { deckCounts, newBudget } from "../lib/scheduler";
 import { loadOutlook } from "../lib/outlook";
@@ -39,27 +39,34 @@ export default function Decks() {
 
   const decks = useLiveQuery(async () => {
     const now = new Date();
-    const [counts, budget] = await Promise.all([deckCounts(now), newBudget(now)]);
+    const [counts, budget, archived] = await Promise.all([
+      deckCounts(now),
+      newBudget(now),
+      archivedDecks(),
+    ]);
     const totals = new Map<string, number>();
     for (const c of await db.cards.toArray()) {
       totals.set(c.deck, (totals.get(c.deck) ?? 0) + 1);
     }
     // Show new counts the queue will actually serve today (budget-capped),
     // so tiles never advertise cards a session won't deliver.
+    const all = [...counts.entries()]
+      .map(([name, c]) => ({
+        name,
+        ...c,
+        newCards: Math.min(c.newCards, budget),
+        total: totals.get(name) ?? 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    // Archived decks sit out: no tile, and nothing of theirs in today's totals.
     return {
       budget,
-      list: [...counts.entries()]
-        .map(([name, c]) => ({
-          name,
-          ...c,
-          newCards: Math.min(c.newCards, budget),
-          total: totals.get(name) ?? 0,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
+      list: all.filter((d) => !archived.has(d.name)),
+      archived: all.filter((d) => archived.has(d.name)),
     };
   }, []);
 
-  const outlook = useLiveQuery(() => loadOutlook(new Date()), []);
+  const outlook = useLiveQuery(async () => loadOutlook(new Date(), 14, await archivedDecks()), []);
   const now = new Date();
 
   if (!decks) return null;
@@ -169,7 +176,8 @@ export default function Decks() {
           }
         />
       ) : (
-        decks.list.length === 0 && (
+        decks.list.length === 0 &&
+        decks.archived.length === 0 && (
           <EmptyCard
             title="No decks yet"
             body={
@@ -195,11 +203,51 @@ export default function Decks() {
             key={deck.name}
             deck={deck}
             outlook={outlook?.byDeck.get(deck.name)}
+            onArchive={() => void setDeckArchived(deck.name, true)}
             onDelete={() => void onDelete(deck.name, deck.total)}
           />
         ))}
         {newDeckTile}
       </div>
+
+      {decks.archived.length > 0 && (
+        <section className="mt-10" aria-labelledby="archived-decks">
+          <h2 id="archived-decks" className="label-caps mb-2 flex justify-between text-muted">
+            Archived <span className="tabular-nums">{decks.archived.length}</span>
+          </h2>
+          <ul className="index-card divide-y divide-hairline bg-paper/70">
+            {decks.archived.map((deck) => (
+              <li key={deck.name} className="flex items-center gap-3 py-1.5 pl-4 pr-2">
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: deckColor(deck.name) }}
+                  aria-hidden
+                />
+                <Link
+                  to={`/browse?deck=${encodeURIComponent(deck.name)}`}
+                  className="min-w-0 flex-1 break-words font-serif font-bold text-ink-2 hover:text-accent"
+                >
+                  {deck.name}
+                </Link>
+                <span className="shrink-0 text-13 tabular-nums text-muted">{plural(deck.total, "card")}</span>
+                <button
+                  onClick={() => void setDeckArchived(deck.name, false)}
+                  className="h-9 shrink-0 rounded-md px-2.5 text-13 font-medium text-accent transition-colors hover:bg-accent-soft"
+                >
+                  Unarchive
+                </button>
+                <button
+                  onClick={() => void onDelete(deck.name, deck.total)}
+                  aria-label={`Delete ${deck.name}`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+                >
+                  <IconTrash className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       </div>
     </div>
   );
@@ -263,10 +311,12 @@ interface DeckSummary {
 function DeckTile({
   deck,
   outlook,
+  onArchive,
   onDelete,
 }: {
   deck: DeckSummary;
   outlook?: { forecast: number[]; mix: Mix };
+  onArchive: () => void;
   onDelete: () => void;
 }) {
   const waiting = deck.due + deck.newCards;
@@ -298,7 +348,7 @@ function DeckTile({
               {deck.total > 0 && ` · ${mature}% mature`}
             </p>
           </div>
-          <DeckMenu name={deck.name} onDelete={onDelete} />
+          <DeckMenu name={deck.name} onArchive={onArchive} onDelete={onDelete} />
         </div>
 
         {outlook && deck.total > 0 && <MixBar mix={outlook.mix} total={deck.total} color={deckColor(deck.name)} className="mt-4 h-1.5" />}
@@ -346,7 +396,15 @@ function DeckTile({
 }
 
 /** Per-deck actions, kept out of the tile's way until asked for. */
-function DeckMenu({ name, onDelete }: { name: string; onDelete: () => void }) {
+function DeckMenu({
+  name,
+  onArchive,
+  onDelete,
+}: {
+  name: string;
+  onArchive: () => void;
+  onDelete: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -382,6 +440,16 @@ function DeckMenu({ name, onDelete }: { name: string; onDelete: () => void }) {
           <Link role="menuitem" to={`/browse${q}`} className={`${item} text-ink-2 hover:bg-sunken hover:text-ink`}>
             Browse cards
           </Link>
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onArchive();
+            }}
+            className={`${item} text-ink-2 hover:bg-sunken hover:text-ink`}
+          >
+            Archive deck
+          </button>
           <div className="my-1 border-t border-hairline" />
           <button
             role="menuitem"

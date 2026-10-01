@@ -60,6 +60,8 @@ export interface PendingUndo {
 /** Deck registry — lets decks exist before they contain cards. */
 export interface DeckRow {
   name: string;
+  /** Hidden from home and the all-decks queue; mirrors `decks/<name>/.archived`. */
+  archived?: boolean;
 }
 
 export interface KVRow {
@@ -94,6 +96,13 @@ db.version(2).stores({
 db.version(3).stores({
   pendingUndos: "reviewId, cardId",
 });
+
+/** Repo marker file that archives a deck on every device. */
+export const archiveMarker = (deck: string) => `decks/${deck}/.archived`;
+
+export async function archivedDecks(): Promise<Set<string>> {
+  return new Set((await db.decks.toArray()).filter((d) => d.archived).map((d) => d.name));
+}
 
 export async function kvGet<T>(key: string): Promise<T | undefined> {
   return (await db.kv.get(key))?.value as T | undefined;

@@ -6,7 +6,7 @@ import {
   type Card as FsrsCard,
   type Grade,
 } from "ts-fsrs";
-import { db, introducedToday, kvGet, type StateRow } from "./db";
+import { archivedDecks, db, introducedToday, kvGet, type CardRow, type StateRow } from "./db";
 
 let scheduler = fsrs();
 
@@ -132,9 +132,7 @@ export async function newBudget(now: Date): Promise<number> {
 export async function buildQueue(deck: string | null, now: Date): Promise<string[]> {
   const cutoff = dueCutoff(now);
   const budget = await newBudget(now);
-  const cards = deck
-    ? await db.cards.where("deck").equals(deck).toArray()
-    : await db.cards.toArray();
+  const cards = await queueCards(deck);
   const states = await db.state.bulkGet(cards.map((c) => c.id));
   const due: { id: string; due: number }[] = [];
   const fresh: string[] = [];
@@ -148,6 +146,17 @@ export async function buildQueue(deck: string | null, now: Date): Promise<string
 }
 
 /**
+ * Cards a session draws from: one deck (archived or not — asking for it by
+ * name is explicit), or every deck that isn't archived.
+ */
+async function queueCards(deck: string | null): Promise<CardRow[]> {
+  if (deck) return db.cards.where("deck").equals(deck).toArray();
+  const archived = await archivedDecks();
+  const cards = await db.cards.toArray();
+  return archived.size ? cards.filter((c) => !archived.has(c.deck)) : cards;
+}
+
+/**
  * Cards due within the next `days` beyond today — for studying ahead.
  * Reviewing early is sound: FSRS factors the shorter elapsed time in.
  */
@@ -158,9 +167,7 @@ export async function buildAheadQueue(
 ): Promise<string[]> {
   const cutoff = dueCutoff(now);
   const horizon = cutoff + days * DAY;
-  const cards = deck
-    ? await db.cards.where("deck").equals(deck).toArray()
-    : await db.cards.toArray();
+  const cards = await queueCards(deck);
   const states = await db.state.bulkGet(cards.map((c) => c.id));
   const upcoming: { id: string; due: number }[] = [];
   cards.forEach((card, i) => {

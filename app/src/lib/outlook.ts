@@ -25,8 +25,14 @@ export interface Outlook {
  * home rail and Stats have something true to show offline. New cards (no state
  * row yet) are not in the forecast; they arrive at the user's own pace.
  */
-export async function loadOutlook(now: Date, days = 14): Promise<Outlook> {
-  const [cards, states] = await Promise.all([db.cards.toArray(), db.state.toArray()]);
+export async function loadOutlook(
+  now: Date,
+  days = 14,
+  /** Decks to leave out entirely (home hides archived ones). */
+  skipDecks?: Set<string>
+): Promise<Outlook> {
+  const [all, states] = await Promise.all([db.cards.toArray(), db.state.toArray()]);
+  const cards = skipDecks?.size ? all.filter((c) => !skipDecks.has(c.deck)) : all;
   const stateById = new Map(states.map((s) => [s.cardId, s]));
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);

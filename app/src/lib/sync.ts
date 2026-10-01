@@ -9,6 +9,7 @@ import {
 } from "./api";
 import { deckFromPath, parseCardFile, serializeCardFile } from "./cardfile";
 import {
+  archiveMarker,
   db,
   getSettings,
   kvDelete,
@@ -487,7 +488,10 @@ async function pullFiles(run: Run, files: ManifestFile[]): Promise<boolean> {
   return settled;
 }
 
-/** Register every deck folder in the repo (covers empty decks too); prune gone ones. */
+/**
+ * Register every deck folder in the repo (covers empty decks too), adopt its
+ * archived flag (the `.archived` marker), and prune decks that are gone.
+ */
 async function syncDecks(run: Run, remote: Map<string, string>, prune: boolean): Promise<void> {
   const remoteDecks = new Set<string>();
   for (const path of remote.keys()) {
@@ -498,13 +502,22 @@ async function syncDecks(run: Run, remote: Map<string, string>, prune: boolean):
   // One transaction, bulk ops: every write wakes each live query once.
   await db.transaction("rw", [db.decks, db.pendingFiles], async () => {
     alive(run);
-    const local = await db.decks.toCollection().primaryKeys();
-    const known = new Set(local);
-    const added = [...remoteDecks].filter((d) => !known.has(d));
-    if (added.length) await db.decks.bulkPut(added.map((name) => ({ name })));
+    const rows = await db.decks.toArray();
+    const local = rows.map((d) => d.name);
+    const archivedLocal = new Map(rows.map((d) => [d.name, d.archived === true]));
+    const pending = await db.pendingFiles.toCollection().primaryKeys();
+    // New decks, and known ones whose marker changed elsewhere. A marker
+    // change still queued here wins until it is pushed.
+    const changed = [...remoteDecks]
+      .map((name) => ({ name, archived: remote.has(archiveMarker(name)) }))
+      .filter(
+        (d) =>
+          !archivedLocal.has(d.name) ||
+          (archivedLocal.get(d.name) !== d.archived && !pending.includes(archiveMarker(d.name)))
+      );
+    if (changed.length) await db.decks.bulkPut(changed);
     if (!prune) return;
     // Deleted elsewhere — unless something local under it is still queued.
-    const pending = await db.pendingFiles.toCollection().primaryKeys();
     const gone = local.filter(
       (d) => !remoteDecks.has(d) && !pending.some((p) => p.startsWith(`decks/${d}/`))
     );

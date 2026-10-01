@@ -2,6 +2,7 @@ import { ulid } from "ulid";
 import { api, blobToBase64 } from "./api";
 import { cardPath, serializeCardFile } from "./cardfile";
 import {
+  archiveMarker,
   bumpIntroducedToday,
   db,
   getDeviceId,
@@ -47,7 +48,7 @@ export async function saveCard(input: {
   }
 
   await db.cards.put(card);
-  await db.decks.put({ name: input.deck });
+  await ensureDeck(input.deck);
   await db.pendingFiles.put({
     path: card.path,
     op: "put",
@@ -59,11 +60,16 @@ export async function saveCard(input: {
   return card;
 }
 
+/** Register a deck without touching an existing row (it may be archived). */
+async function ensureDeck(name: string): Promise<void> {
+  if (!(await db.decks.get(name))) await db.decks.put({ name });
+}
+
 /** Register a deck and persist it to the repo (a .gitkeep keeps the folder). */
 export async function createDeck(name: string): Promise<void> {
   const clean = name.trim().replace(/\.\./g, "").replace(/^\/+|\/+$/g, "");
   if (!clean) return;
-  await db.decks.put({ name: clean });
+  await ensureDeck(clean);
   await db.pendingFiles.put({
     path: `decks/${clean}/.gitkeep`,
     op: "put",
@@ -89,7 +95,27 @@ export async function deleteDeck(name: string): Promise<void> {
     op: "delete",
     queuedAt: Date.now(),
   });
+  // Same for the archive marker: left behind, it would keep the folder alive.
+  await db.pendingFiles.put({ path: archiveMarker(name), op: "delete", queuedAt: Date.now() });
   requestSync(300);
+}
+
+/**
+ * Archive or restore a deck. Archived decks leave the home grid and the
+ * all-decks queue; cards and review history are untouched. The flag travels
+ * as a marker file in the deck folder, so every device agrees.
+ */
+export async function setDeckArchived(name: string, archived: boolean): Promise<void> {
+  await db.transaction("rw", [db.decks, db.pendingFiles], async () => {
+    await db.decks.put({ name, archived });
+    await db.pendingFiles.put({
+      path: archiveMarker(name),
+      op: archived ? "put" : "delete",
+      ...(archived ? { content: "" } : {}),
+      queuedAt: Date.now(),
+    });
+  });
+  requestSync(500);
 }
 
 export async function deleteCard(id: string): Promise<void> {
@@ -243,7 +269,7 @@ export async function restoreBackup(backup: Backup): Promise<RestoreResult> {
           sha: null,
         };
         await db.cards.put(card);
-        await db.decks.put({ name: card.deck });
+        await ensureDeck(card.deck);
         await db.pendingFiles.put({
           path: card.path,
           op: "put",

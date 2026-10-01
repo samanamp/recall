@@ -118,7 +118,10 @@ back markdown
 ```
 
 Path: `decks/<deck>/<ulid>-<slug>.md`. Deck = folder. Empty decks persist as
-`decks/<name>/.gitkeep`. Images: `media/<contenthash>.webp`, referenced as
+`decks/<name>/.gitkeep`. An archived deck carries `decks/<name>/.archived`
+(empty marker, written by `setDeckArchived`): sync mirrors it into
+`DeckRow.archived`, and home plus the all-decks queue skip those decks. Never
+`db.decks.put({ name })` over an existing row — it drops the flag. Images: `media/<contenthash>.webp`, referenced as
 `![](../../media/<file>)` (renders on GitHub too). Images are optimized
 client-side at paste time (`app/src/lib/image.ts`): max 1000px (= 500px
 mobile @2x DPR), WebP q0.8, content-hash dedupe. GIF/SVG pass through.

@@ -10,7 +10,7 @@ vi.mock("./api", async (importOriginal) => ({
 }));
 
 import { ApiError } from "./api";
-import { recordReview, saveCard, undoReview } from "./actions";
+import { recordReview, saveCard, setDeckArchived, undoReview } from "./actions";
 import { serializeCardFile } from "./cardfile";
 import { db, kvGet, kvSet } from "./db";
 import { syncAll } from "./sync";
@@ -168,6 +168,53 @@ describe("pull", () => {
     expect(copy!.id).not.toBe(ID_X);
     const queued = await db.pendingFiles.get("decks/b/copy.md");
     expect(queued?.content).toContain(`id: ${copy!.id}`);
+  });
+});
+
+describe("archived decks", () => {
+  it("archiving pushes a marker file; unarchiving removes it", async () => {
+    server.write(`decks/a/${ID_X}.md`, file(ID_X, "x"));
+    await syncAll();
+
+    await setDeckArchived("a", true);
+    expect((await syncAll()).ok).toBe(true);
+    expect(server.files.has("decks/a/.archived")).toBe(true);
+    expect(await db.decks.get("a")).toMatchObject({ archived: true });
+
+    await setDeckArchived("a", false);
+    expect((await syncAll()).ok).toBe(true);
+    expect(server.files.has("decks/a/.archived")).toBe(false);
+    expect((await db.decks.get("a"))?.archived).toBeFalsy();
+    expect(await db.cards.get(ID_X)).toBeDefined();
+  });
+
+  it("a deck archived on another device is archived here, and back again", async () => {
+    server.write(`decks/a/${ID_X}.md`, file(ID_X, "x"));
+    await syncAll();
+
+    server.write("decks/a/.archived", "");
+    await syncAll();
+    expect(await db.decks.get("a")).toMatchObject({ archived: true });
+
+    server.remove("decks/a/.archived");
+    await syncAll();
+    expect((await db.decks.get("a"))?.archived).toBeFalsy();
+  });
+
+  it("saving a card into an archived deck leaves it archived", async () => {
+    await setDeckArchived("a", true);
+    await saveCard({ deck: "a", front: "q", back: "a" });
+    expect(await db.decks.get("a")).toMatchObject({ archived: true });
+  });
+
+  it("the all-decks queue skips archived decks; asking by name still works", async () => {
+    await saveCard({ deck: "a", front: "q", back: "a" });
+    await saveCard({ deck: "b", front: "q", back: "a" });
+    await setDeckArchived("a", true);
+    const { buildQueue } = await import("./scheduler");
+    const all = await buildQueue(null, new Date());
+    expect(await db.cards.bulkGet(all)).toMatchObject([{ deck: "b" }]);
+    expect(await buildQueue("a", new Date())).toHaveLength(1);
   });
 });
 
