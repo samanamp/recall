@@ -75,7 +75,11 @@ export const api = {
       unchanged?: true;
       cursor: string;
       files?: ManifestFile[];
+      // Today `state` is always the whole card_state table, which lets the
+      // client drop rows the server no longer has. A future delta response
+      // must set this so the client knows absence ≠ deletion.
       state?: ServerCardState[];
+      stateIsDelta?: true;
       params?: FsrsParams;
       reviewCount: number;
       accepted: number;
