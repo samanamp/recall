@@ -105,6 +105,7 @@ export async function deckCounts(now: Date): Promise<Map<string, DeckCounts>> {
     counts.set(deck.name, { due: 0, newCards: 0 });
   }
   for (const card of cards) {
+    if (card.archived) continue;
     const entry = counts.get(card.deck) ?? { due: 0, newCards: 0 };
     const s = stateById.get(card.id);
     if (!s) entry.newCards++;
@@ -170,13 +171,13 @@ export async function newCardsInOrder(deck: string | null): Promise<CardRow[]> {
 
 /**
  * Cards a session draws from: one deck (archived or not — asking for it by
- * name is explicit), or every deck that isn't archived.
+ * name is explicit), or every deck that isn't archived. Archived cards never.
  */
 async function queueCards(deck: string | null): Promise<CardRow[]> {
-  if (deck) return db.cards.where("deck").equals(deck).toArray();
+  if (deck) return (await db.cards.where("deck").equals(deck).toArray()).filter((c) => !c.archived);
   const archived = await archivedDecks();
   const cards = await db.cards.toArray();
-  return archived.size ? cards.filter((c) => !archived.has(c.deck)) : cards;
+  return cards.filter((c) => !c.archived && !archived.has(c.deck));
 }
 
 /**

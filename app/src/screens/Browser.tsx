@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Markdown from "../components/Markdown";
 import { useLiveQuery } from "dexie-react-hooks";
 import { IconBrowse, IconTrash } from "../components/icons";
-import { deleteCard } from "../lib/actions";
+import { deleteCard, setCardArchived } from "../lib/actions";
 import { db } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
 import { smarten } from "../lib/typography";
@@ -15,6 +15,13 @@ export default function Browser() {
   const [query, setQuery] = useState("");
   const [params] = useSearchParams();
   const [deckFilter, setDeckFilter] = useState<string | null>(() => params.get("deck"));
+  // Archived cards live behind their own chip, out of the everyday list.
+  const [showArchived, setShowArchived] = useState(false);
+  const archivedCount = useLiveQuery(
+    async () => (await db.cards.toArray()).filter((c) => c.archived).length,
+    [],
+    0
+  );
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -40,6 +47,7 @@ export default function Browser() {
       .filter(
         (c) =>
           (!deckFilter || c.deck === deckFilter) &&
+          Boolean(c.archived) === showArchived &&
           (!q ||
             c.front.toLowerCase().includes(q) ||
             c.back.toLowerCase().includes(q) ||
@@ -50,7 +58,7 @@ export default function Browser() {
         const due = stateById.get(c.id)?.due;
         return { ...c, dueInDays: due === undefined ? null : Math.ceil((due - now) / 86_400_000) };
       });
-  }, [query, deckFilter]);
+  }, [query, deckFilter, showArchived]);
 
   useEffect(() => () => clearTimeout(confirmTimer.current), []);
 
@@ -167,13 +175,29 @@ export default function Browser() {
             {d}
           </button>
         ))}
+        {(archivedCount > 0 || showArchived) && (
+          <button
+            onClick={() => {
+              setShowArchived((v) => !v);
+              setLimit(PAGE);
+            }}
+            aria-pressed={showArchived}
+            className={`${chip(showArchived)} sm:ml-auto`}
+          >
+            Archived <span className="tabular-nums opacity-70">{archivedCount}</span>
+          </button>
+        )}
       </div>
 
       <div className="lg:grid lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)] lg:items-start lg:gap-6">
       <div className="min-w-0">
       {cards && total === 0 ? (
         <p className="index-card px-5 py-10 text-center text-sm text-muted">
-          {query || deckFilter ? "No cards match." : "No cards yet."}
+          {showArchived && !query && !deckFilter
+            ? "No archived cards."
+            : query || deckFilter || showArchived
+              ? "No cards match."
+              : "No cards yet."}
         </p>
       ) : (
         <ul className="index-card divide-y divide-hairline overflow-hidden">
@@ -204,7 +228,7 @@ export default function Browser() {
                 </div>
                 <div className="mt-0.5 truncate text-xs text-muted">{card.deck}</div>
               </Link>
-              <DueBadge days={card.dueInDays} />
+              {card.archived ? <ArchivedTag /> : <DueBadge days={card.dueInDays} />}
               {!wide && <button
                 onClick={() => void onDelete(card.id)}
                 aria-label={confirmId === card.id ? "Confirm delete" : "Delete card"}
@@ -241,7 +265,12 @@ export default function Browser() {
       </div>
 
       {wide && selected && (
-        <CardPane card={selected} armed={confirmId === selected.id} onDelete={() => void onDelete(selected.id)} />
+        <CardPane
+          card={selected}
+          armed={confirmId === selected.id}
+          onDelete={() => void onDelete(selected.id)}
+          onArchive={() => void setCardArchived(selected.id, !selected.archived)}
+        />
       )}
       </div>
     </div>
@@ -253,10 +282,12 @@ function CardPane({
   card,
   armed,
   onDelete,
+  onArchive,
 }: {
-  card: { id: string; deck: string; front: string; back: string; dueInDays: number | null };
+  card: { id: string; deck: string; front: string; back: string; dueInDays: number | null; archived?: boolean };
   armed: boolean;
   onDelete: () => void;
+  onArchive: () => void;
 }) {
   return (
     <article
@@ -269,11 +300,18 @@ function CardPane({
           <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: deckColor(card.deck) }} aria-hidden />
           <span className="truncate">{card.deck}</span>
         </span>
-        <span className="text-13 text-muted">{dueText(card.dueInDays)}</span>
+        <span className="text-13 text-muted">{card.archived ? "Archived" : dueText(card.dueInDays)}</span>
+        <button
+          onClick={onArchive}
+          title={card.archived ? "Put it back into study, schedule intact" : "Stop studying it; history is kept"}
+          className="ml-auto flex h-8 items-center rounded-md px-2.5 text-13 font-medium text-muted transition-colors hover:bg-sunken hover:text-ink"
+        >
+          {card.archived ? "Restore" : "Archive"}
+        </button>
         <button
           onClick={onDelete}
           aria-label={armed ? "Confirm delete" : "Delete card"}
-          className={`ml-auto flex h-8 items-center gap-1.5 rounded-md px-2.5 text-13 font-medium transition-colors ${
+          className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-13 font-medium transition-colors ${
             armed ? "bg-danger-fill text-white" : "text-muted hover:bg-danger-soft hover:text-danger"
           }`}
         >
@@ -312,6 +350,14 @@ function useMediaQuery(query: string): boolean {
     return () => mq.removeEventListener("change", on);
   }, [query]);
   return match;
+}
+
+function ArchivedTag() {
+  return (
+    <span className="shrink-0 rounded-[4px] bg-sunken px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-muted">
+      Archived
+    </span>
+  );
 }
 
 /** `days` until due; null = never reviewed. */

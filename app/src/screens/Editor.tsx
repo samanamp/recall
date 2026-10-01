@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import Markdown from "../components/Markdown";
-import { addMedia, deleteCard, saveCard } from "../lib/actions";
+import { addMedia, deleteCard, saveCard, setCardArchived } from "../lib/actions";
 import { splitFrontBack } from "../lib/cardfile";
 import { db } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
@@ -28,6 +28,8 @@ export default function Editor() {
   const [deleting, setDeleting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Live, so Archive/Restore reflects the current flag.
+  const card = useLiveQuery(() => (id ? db.cards.get(id) : undefined), [id]);
   const decks = useLiveQuery(
     async () => (await db.decks.toArray()).map((d) => d.name).sort(),
     [],
@@ -147,6 +149,15 @@ export default function Editor() {
       <div className="flex items-center gap-3">
         <h1 className="font-serif text-display font-semibold tracking-tight">{id ? "Edit card" : "New card"}</h1>
         <div className="ml-auto flex items-center gap-1">
+          {id && !confirmDelete && card && (
+            <button
+              onClick={() => void setCardArchived(id, !card.archived)}
+              title={card.archived ? "Put it back into study, schedule intact" : "Stop studying it; history is kept"}
+              className="h-10 rounded-md px-3 text-sm font-medium text-muted transition-colors hover:bg-sunken hover:text-ink"
+            >
+              {card.archived ? "Restore" : "Archive"}
+            </button>
+          )}
           {id && !confirmDelete && (
             <button
               onClick={() => setConfirmDelete(true)}

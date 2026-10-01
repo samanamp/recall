@@ -75,8 +75,9 @@ let b = Box::new(5);
 ​```
 ```
 
-- Frontmatter: `id` (ULID, required), `created` (date, informational), and
-  `order` (optional). New cards are studied in `order ?? id` order, so by
+- Frontmatter: `id` (ULID, required), `created` (date, informational),
+  `archived: true` (optional: kept with its history but out of every queue and
+  count; restoring it resumes its schedule), and `order` (optional). New cards are studied in `order ?? id` order, so by
   creation time until a card is pushed back with "Show later": its `order`
   becomes the study key of the card it now follows plus `~`, which sorts
   just after that card. Delete the line to restore the default position.

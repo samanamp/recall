@@ -8,6 +8,7 @@ import type { CardRow } from "./db";
  *   id: <ULID>
  *   created: <ISO date>
  *   order: <sort key>      (optional; see `studyRank`)
+ *   archived: true         (optional; out of every queue and count)
  *   ---
  *   front markdown
  *   ---
@@ -21,6 +22,8 @@ export interface ParsedCard {
   back: string;
   /** New-card study position, when it was pushed back (absent = by id). */
   order?: string;
+  /** Kept in the repo with its history, but never studied. */
+  archived?: boolean;
   /** False if the file had no id (hand-authored) and one was generated. */
   hadId: boolean;
 }
@@ -31,6 +34,7 @@ export function parseCardFile(text: string): ParsedCard {
   let id = "";
   let created = "";
   let order = "";
+  let archived = false;
   let bodyStart = 0;
 
   if (lines[0]?.trim() === "---") {
@@ -41,6 +45,7 @@ export function parseCardFile(text: string): ParsedCard {
         if (m?.[1] === "id") id = m[2].trim();
         if (m?.[1] === "created") created = m[2].trim();
         if (m?.[1] === "order") order = m[2].trim();
+        if (m?.[1] === "archived") archived = m[2].trim() === "true";
       }
       bodyStart = end + 1;
     }
@@ -57,6 +62,7 @@ export function parseCardFile(text: string): ParsedCard {
     front,
     back,
     ...(order ? { order } : {}),
+    ...(archived ? { archived } : {}),
     hadId: Boolean(id),
   };
 }
@@ -75,9 +81,12 @@ export function splitFrontBack(text: string): { front: string; back: string } {
   };
 }
 
-export function serializeCardFile(card: Pick<CardRow, "id" | "created" | "front" | "back" | "order">): string {
+export function serializeCardFile(
+  card: Pick<CardRow, "id" | "created" | "front" | "back" | "order" | "archived">
+): string {
   const order = card.order ? `order: ${card.order}\n` : "";
-  return `---\nid: ${card.id}\ncreated: ${card.created}\n${order}---\n${card.front.trim()}\n---\n${card.back.trim()}\n`;
+  const archived = card.archived ? "archived: true\n" : "";
+  return `---\nid: ${card.id}\ncreated: ${card.created}\n${order}${archived}---\n${card.front.trim()}\n---\n${card.back.trim()}\n`;
 }
 
 export function deckFromPath(path: string): string {

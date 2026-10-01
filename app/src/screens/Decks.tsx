@@ -46,6 +46,7 @@ export default function Decks() {
     ]);
     const totals = new Map<string, number>();
     for (const c of await db.cards.toArray()) {
+      if (c.archived) continue; // archived cards sit out of every count
       totals.set(c.deck, (totals.get(c.deck) ?? 0) + 1);
     }
     // Show new counts the queue will actually serve today (budget-capped),

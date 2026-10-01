@@ -39,6 +39,7 @@ export async function saveCard(input: {
     path: existing && existing.deck === input.deck ? existing.path : "",
     sha: existing?.sha ?? null,
     ...(existing?.order ? { order: existing.order } : {}),
+    ...(existing?.archived ? { archived: true } : {}),
   };
   if (!card.path) {
     card.path = cardPath(input.deck, card.id, input.front);
@@ -64,6 +65,20 @@ async function writeCard(card: CardRow): Promise<void> {
     queuedAt: Date.now(),
   });
   requestSync(500);
+}
+
+/**
+ * Archive or restore one card. An archived card stays in the repo with its
+ * review history and schedule, but leaves every queue and count; restoring it
+ * picks up where it was (overdue cards come straight back as due). The flag
+ * lives in the card file, so it syncs like an edit.
+ */
+export async function setCardArchived(id: string, archived: boolean): Promise<void> {
+  const card = await db.cards.get(id);
+  if (!card || Boolean(card.archived) === archived) return;
+  const { archived: _drop, ...rest } = card;
+  void _drop;
+  await writeCard(archived ? { ...rest, archived: true } : rest);
 }
 
 /** What `pushBack` changed, so it can be undone. `cardId` is the card undo brings back. */

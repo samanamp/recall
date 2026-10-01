@@ -6,6 +6,7 @@ import {
   PUSH_BACK_BY,
   pushBack,
   recordReview,
+  setCardArchived,
   undoPushBack,
   undoReview,
   type PushBackUndo,
@@ -27,7 +28,10 @@ const kbd =
   "h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-[3px] border border-current/25 px-1 font-sans text-2xs font-semibold leading-none";
 
 /** One undoable step of a session: a rating, or a new card shown later. */
-type SessionUndo = { kind: "review"; undo: ReviewUndo } | { kind: "later"; undo: PushBackUndo };
+type SessionUndo =
+  | { kind: "review"; undo: ReviewUndo }
+  | { kind: "later"; undo: PushBackUndo }
+  | { kind: "archive"; undo: { cardId: string } };
 
 export default function Review() {
   const deckParam = useParams().deck;
@@ -134,7 +138,20 @@ export default function Review() {
     [card, queue, deck, loadNext, exclusive, flash]
   );
 
-  /** Reverse the last rating or "later" and bring that card back, answer shown. */
+  /** Take this card out of study; it stays in Browse with its history. */
+  const archive = useCallback(
+    () =>
+      exclusive(async () => {
+        if (!card || !queue) return;
+        await setCardArchived(card.id, true);
+        setUndoStack((s) => [...s.slice(-49), { kind: "archive", undo: { cardId: card.id } }]);
+        flash("Archived · restore it from Browse");
+        await loadNext(queue.slice(1));
+      }),
+    [card, queue, loadNext, exclusive, flash]
+  );
+
+  /** Reverse the last step (rating, "later", archive) and bring that card back, answer shown. */
   const onUndo = useCallback(
     () =>
       exclusive(async () => {
@@ -143,6 +160,9 @@ export default function Review() {
         setUndoStack((s) => s.slice(0, -1));
         if (step.kind === "later") {
           await undoPushBack(step.undo);
+          setNote(null);
+        } else if (step.kind === "archive") {
+          await setCardArchived(step.undo.cardId, false);
           setNote(null);
         } else {
           // Newer sync engines report where the undo landed; "queued" = offline.
@@ -158,7 +178,7 @@ export default function Review() {
     [undoStack, queue, loadNext, exclusive, flash]
   );
 
-  // Keyboard: space/enter reveals, 1-4 rates, l shows a new card later, z undoes. Held keys (auto-repeat)
+  // Keyboard: space/enter reveals, 1-4 rates, l shows later, a archives, z undoes. Held keys (auto-repeat)
   // and modified keys (⌘1 switches browser tabs, ⌘Z is the editor's) are ignored.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -166,7 +186,7 @@ export default function Review() {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key.toLowerCase();
       const ours =
-        key === "z" || key === "l" || key === " " || key === "enter" || ["1", "2", "3", "4"].includes(key);
+        key === "z" || key === "l" || key === "a" || key === " " || key === "enter" || ["1", "2", "3", "4"].includes(key);
       if (!ours) return;
       if (e.repeat) {
         e.preventDefault();
@@ -178,6 +198,9 @@ export default function Review() {
       } else if (key === "l") {
         e.preventDefault();
         void later();
+      } else if (key === "a") {
+        e.preventDefault();
+        void archive();
       } else if (!revealed && (key === " " || key === "enter")) {
         e.preventDefault();
         setRevealed(true);
@@ -188,7 +211,7 @@ export default function Review() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [revealed, rate, onUndo, later]);
+  }, [revealed, rate, onUndo, later, archive]);
 
   if (queue === null) return null;
 
@@ -320,7 +343,7 @@ export default function Review() {
               ))}
             </div>
           )}
-          <div className="mt-1 flex items-center justify-center text-xs text-muted">
+          <div className="mt-1 flex flex-wrap items-center justify-center text-xs text-muted">
             {undoStack.length > 0 && (
               <>
                 <button
@@ -346,17 +369,27 @@ export default function Review() {
               Show later
             </button>
             <span aria-hidden>·</span>
+            <button
+              onClick={() => void archive()}
+              disabled={busy}
+              title="Stop studying this card; it stays in Browse with its history (A)"
+              className="inline-flex h-10 items-center px-2 hover:text-accent sm:h-8"
+            >
+              Archive
+            </button>
+            <span aria-hidden>·</span>
             <Link to={`/edit/${card.id}`} className="inline-flex h-10 items-center px-2 hover:text-accent sm:h-8">
               Edit card
             </Link>
             {note ? (
               <>
-                <span aria-hidden>·</span>
-                <span role="status" className="px-2">{note}</span>
+                <span aria-hidden className="hidden sm:inline">·</span>
+                {/* own line on phones, so a wrap never strands a separator */}
+                <span role="status" className="basis-full px-2 text-center sm:basis-auto">{note}</span>
               </>
             ) : (
               <span className="hidden items-center sm:inline-flex" aria-hidden>
-                ·<span className="px-2">space reveal · 1–4 rate · l later · z undo</span>
+                ·<span className="px-2">space reveal · 1–4 rate · l later · a archive · z undo</span>
               </span>
             )}
           </div>

@@ -32,7 +32,7 @@ export async function loadOutlook(
   skipDecks?: Set<string>
 ): Promise<Outlook> {
   const [all, states] = await Promise.all([db.cards.toArray(), db.state.toArray()]);
-  const cards = skipDecks?.size ? all.filter((c) => !skipDecks.has(c.deck)) : all;
+  const cards = all.filter((c) => !c.archived && !skipDecks?.has(c.deck));
   const stateById = new Map(states.map((s) => [s.cardId, s]));
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);

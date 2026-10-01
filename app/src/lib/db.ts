@@ -11,6 +11,7 @@ export interface CardRow {
   back: string;
   created: string; // ISO date
   order?: string; // new-card study position once pushed back (see studyRank)
+  archived?: boolean; // out of every queue and count, kept with its history
 }
 
 export interface MediaRow {
