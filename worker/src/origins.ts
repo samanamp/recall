@@ -3,6 +3,8 @@
  * CORS involved); cross-origin callers are local dev servers, the browser
  * extension, and whatever the deployer lists in ALLOWED_ORIGINS (e.g. an app
  * hosted on Pages). Anything else gets no Access-Control-Allow-Origin.
+ * `ALLOWED_ORIGINS = "*"` opts back into allowing every origin (every route
+ * still needs the bearer token).
  */
 const BUILTIN = [
   /^http:\/\/localhost(:\d+)?$/,
@@ -23,5 +25,5 @@ export function allowedOrigin(
     .split(",")
     .map((s) => s.trim().replace(/\/+$/, ""))
     .filter(Boolean);
-  return listed.includes(origin) ? origin : null;
+  return listed.includes("*") || listed.includes(origin) ? origin : null;
 }

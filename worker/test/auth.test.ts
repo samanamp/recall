@@ -51,6 +51,10 @@ describe("CORS allow-list", () => {
     );
   });
 
+  it("allows any origin when the list is a wildcard", () => {
+    expect(allowedOrigin("https://anything.example", self, "*")).toBe("https://anything.example");
+  });
+
   it("refuses everything else", () => {
     expect(allowedOrigin("https://evil.example", self, undefined)).toBeNull();
     expect(allowedOrigin("http://localhost.evil.example", self, undefined)).toBeNull();

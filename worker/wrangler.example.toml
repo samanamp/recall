@@ -34,6 +34,7 @@ GITHUB_BRANCH = "__CARDS_BRANCH__"
 # app is served by this worker (same origin); localhost dev servers and the
 # browser extension are always allowed. Example for an app hosted on Pages:
 # ALLOWED_ORIGINS = "https://recall.pages.dev"
+# Or "*" to allow every origin (requests still need the app token).
 
 # Secrets (set with `npx wrangler secret put <NAME>`):
 #   APP_TOKEN     - shared secret your devices use to talk to this worker
