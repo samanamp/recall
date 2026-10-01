@@ -50,9 +50,9 @@ interface AnkiReview {
   ease: number;
 }
 
-// Replays on the worker cost ~2 D1 queries per distinct card; the free tier
-// allows 50 queries per invocation. Stay well under it.
-const REVIEW_CHUNK_CARDS = 15;
+// The worker ingests and replays in batches (a fixed handful of D1 queries per
+// request), capped at 500 reviews and 500 distinct cards. Stay under both.
+const REVIEW_CHUNK_CARDS = 400;
 const REVIEW_CHUNK_SIZE = 400;
 
 export async function importApkg(
