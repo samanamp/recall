@@ -34,7 +34,7 @@ export default function App() {
   return (
     <div className="min-h-dvh bg-desk text-ink">
       <header className="sticky top-0 z-20 border-b border-hairline bg-desk/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-4xl items-center gap-2 px-4">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
           <NavLink to="/" className="-ml-1 flex items-center gap-2 rounded-md px-1 py-1 text-ink" aria-label="recall — decks">
             <Mark className="h-6 w-6" />
             <span className="font-serif text-[1.2rem] font-semibold leading-none tracking-[-0.01em]">recall</span>
@@ -50,7 +50,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-5 sm:pb-12 sm:pt-8">
+      <main className="mx-auto max-w-6xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-5 sm:pb-12 sm:pt-8">
         <Routes>
           <Route path="/" element={<Decks />} />
           <Route path="/review" element={<Review />} />

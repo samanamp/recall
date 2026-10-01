@@ -7,6 +7,8 @@ import { createDeck, deleteDeck } from "../lib/actions";
 import { db, kvGet } from "../lib/db";
 import { deckColor } from "../lib/deck-color";
 import { deckCounts, newBudget } from "../lib/scheduler";
+import { loadOutlook } from "../lib/outlook";
+import { CollectionMix, ForecastBars } from "../components/Outlook";
 
 export default function Decks() {
   const [adding, setAdding] = useState(false);
@@ -58,7 +60,15 @@ export default function Decks() {
     };
   }, []);
 
+  const outlook = useLiveQuery(() => loadOutlook(new Date()), []);
+  const now = new Date();
+
   if (!decks) return null;
+
+  const nextInDays = decks.list.reduce<number | undefined>(
+    (m, d) => (d.nextInDays !== undefined && (m === undefined || d.nextInDays < m) ? d.nextInDays : m),
+    undefined
+  );
 
   const totalCards = decks.list.reduce((n, d) => n + d.total, 0);
   const totalDue = decks.list.reduce((n, d) => n + d.due, 0);
@@ -73,9 +83,9 @@ export default function Decks() {
         e.preventDefault();
         void onCreate();
       }}
-      className="index-card flex min-h-[9.5rem] flex-col justify-between gap-3 border-accent-rule p-4"
+      className="index-card flex flex-wrap items-center gap-3 border-accent-rule p-3 pl-4 sm:col-span-2"
     >
-      <label className="label-caps text-muted" htmlFor="new-deck-name">
+      <label className="label-caps shrink-0 text-muted" htmlFor="new-deck-name">
         New deck
       </label>
       <input
@@ -85,9 +95,9 @@ export default function Decks() {
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && setAdding(false)}
         placeholder="Deck name"
-        className="w-full border-b border-hairline-strong bg-transparent pb-1.5 font-serif text-lg outline-none placeholder:text-faint focus:border-accent-rule"
+        className="min-w-0 flex-1 border-b border-hairline-strong bg-transparent pb-1 font-serif text-lg outline-none placeholder:text-faint focus:border-accent-rule"
       />
-      <div className="flex items-center justify-end gap-1">
+      <div className="ml-auto flex items-center gap-1">
         <button
           type="button"
           onClick={() => setAdding(false)}
@@ -107,38 +117,42 @@ export default function Decks() {
   ) : (
     <button
       onClick={() => setAdding(true)}
-      className="flex min-h-[9.5rem] flex-col items-center justify-center gap-1 rounded-[var(--radius-card)] border border-dashed border-hairline-strong text-sm font-medium text-muted transition-colors hover:border-accent-rule hover:bg-paper/60 hover:text-accent"
+      className="flex h-12 items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed sm:col-span-2 border-hairline-strong text-sm font-medium text-muted transition-colors hover:border-accent-rule hover:bg-paper/60 hover:text-accent"
     >
-      <span className="text-xl leading-none" aria-hidden>+</span>
+      <span className="text-lg leading-none" aria-hidden>+</span>
       New deck
     </button>
   );
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-        <div>
-          <h1 className="font-serif text-display font-semibold tracking-tight">Decks</h1>
-          {totalCards > 0 && (
-            <p className="mt-0.5 text-13 text-muted">
-              {plural(totalCards, "card")} in {plural(decks.list.length, "deck")}
-            </p>
-          )}
-        </div>
-        {totalDue + totalNew > 0 ? (
-          <Link
-            to="/review"
-            className="flex h-11 items-center gap-3 rounded-md bg-accent-fill pl-4 pr-3 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-fill-hover"
-          >
-            Study all
-            <span className="rounded-[4px] bg-black/15 px-2 py-0.5 text-xs font-medium tabular-nums dark:bg-black/10">
-              {totalDue > 0 && `${totalDue} due`}
-              {totalDue > 0 && totalNew > 0 && " · "}
-              {totalNew > 0 && `${totalNew} new`}
-            </span>
-          </Link>
-        ) : (
-          totalCards > 0 && <span className="text-sm text-muted">All caught up</span>
+    <div className="grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
+      <aside className="space-y-4 lg:sticky lg:top-[5.5rem] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
+        {configured && totalCards > 0 && (
+          <TodayPanel due={totalDue} fresh={totalNew} nextInDays={nextInDays} />
+        )}
+        {outlook && outlook.total > 0 && (
+          <>
+            <section className="index-card hidden p-4 lg:block">
+              <h2 className="label-caps mb-3 text-ink-2">Next 14 days</h2>
+              <ForecastBars forecast={outlook.forecast} now={now} />
+            </section>
+            <section className="index-card hidden p-4 lg:block">
+              <h2 className="label-caps mb-3 flex justify-between text-ink-2">
+                Collection <span className="tabular-nums text-muted">{outlook.total}</span>
+              </h2>
+              <CollectionMix mix={outlook.mix} total={outlook.total} />
+            </section>
+          </>
+        )}
+      </aside>
+
+      <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+      <div className="mb-5 flex items-end justify-between gap-4">
+        <h1 className="font-serif text-display font-semibold tracking-tight">Decks</h1>
+        {totalCards > 0 && (
+          <p className="pb-1 text-13 tabular-nums text-muted">
+            {plural(totalCards, "card")} in {plural(decks.list.length, "deck")}
+          </p>
         )}
       </div>
 
@@ -176,7 +190,7 @@ export default function Decks() {
         )
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         {decks.list.map((deck) => {
           const idle = deck.due === 0 && deck.newCards === 0;
           return (
@@ -225,7 +239,50 @@ export default function Decks() {
         })}
         {newDeckTile}
       </div>
+      </div>
     </div>
+  );
+}
+
+/** The day's job in one card: how much, how long, and the button to start. */
+function TodayPanel({ due, fresh, nextInDays }: { due: number; fresh: number; nextInDays?: number }) {
+  const n = due + fresh;
+  // rough pace: a review takes ~10s, a first look at a new card ~25s
+  const minutes = Math.max(1, Math.round((due * 10 + fresh * 25) / 60));
+  const date = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  return (
+    <section className="index-card index-card--ruled p-4 sm:p-5">
+      <div className="label-caps flex justify-between text-muted">
+        <span className="text-accent">Today</span>
+        <span>{date}</span>
+      </div>
+      {n > 0 ? (
+        <>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-[2.75rem] font-semibold leading-none tabular-nums tracking-tight text-ink">{n}</span>
+            <span className="text-sm text-ink-2">{n === 1 ? "card" : "cards"} to study</span>
+          </div>
+          <p className="mt-2 text-13 tabular-nums text-muted">
+            {due} due · {fresh} new · about {minutes} min
+          </p>
+          <Link
+            to="/review"
+            className="mt-4 flex h-11 items-center justify-center rounded-md bg-accent-fill text-sm font-semibold text-on-accent transition-colors hover:bg-accent-fill-hover"
+          >
+            Study all decks
+          </Link>
+        </>
+      ) : (
+        <>
+          <p className="mt-3 font-serif text-xl font-bold">All caught up</p>
+          <p className="mt-1 text-13 text-muted">
+            {nextInDays === undefined
+              ? "Nothing scheduled yet."
+              : `Next review ${nextInDays === 1 ? "tomorrow" : `in ${nextInDays} days`}.`}
+          </p>
+        </>
+      )}
+    </section>
   );
 }
 

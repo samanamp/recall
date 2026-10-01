@@ -213,10 +213,10 @@ export default function Settings() {
   const errText = "text-danger";
 
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-4xl">
       <h1 className="mb-6 font-serif text-display font-semibold tracking-tight">Settings</h1>
 
-      <div className="space-y-5">
+      <div className="index-card divide-y divide-hairline">
         <Section title="Sync" lede="The app token you chose during setup. Worker URL is only needed when the app isn't served by the worker itself (e.g. local dev).">
           <div className="space-y-4">
             <div>
@@ -455,10 +455,13 @@ export default function Settings() {
 
 function Section({ title, lede, children }: { title: string; lede?: string; children: React.ReactNode }) {
   return (
-    <section className="index-card p-5 sm:p-6">
-      <h2 className="font-serif text-lg font-semibold tracking-tight">{title}</h2>
-      {lede && <p className="mb-5 mt-1 text-13 leading-relaxed text-muted">{lede}</p>}
-      {children}
+    // wide: the explanation sits beside its controls, so the page reads as one form
+    <section className="grid gap-x-12 px-5 py-6 sm:px-8 sm:py-7 lg:grid-cols-[17rem_minmax(0,32rem)]">
+      <div>
+        <h2 className="font-serif text-lg font-bold tracking-tight">{title}</h2>
+        {lede && <p className="mb-5 mt-1 text-13 leading-relaxed text-muted lg:mb-0">{lede}</p>}
+      </div>
+      <div className="min-w-0">{children}</div>
     </section>
   );
 }

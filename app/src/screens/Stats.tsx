@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
+import { useLiveQuery } from "dexie-react-hooks";
 import { kvGet, kvSet } from "../lib/db";
+import { loadOutlook } from "../lib/outlook";
+import { CollectionMix, ForecastBars } from "../components/Outlook";
 
 interface Daily {
   day: string;
@@ -14,7 +17,7 @@ interface StatsData {
 }
 
 const DAY = 86_400_000;
-const WEEKS = 17; // heatmap span
+const WEEKS = 52; // heatmap span: a year, scrolled to the latest week on narrow screens
 
 export default function Stats() {
   const [data, setData] = useState<StatsData | null>(null);
@@ -24,6 +27,7 @@ export default function Stats() {
   const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const heatmapRef = useRef<HTMLDivElement>(null);
+  const outlook = useLiveQuery(() => loadOutlook(new Date()), []);
 
   // stale-while-revalidate: render the cached stats instantly, refresh behind
   useEffect(() => {
@@ -72,9 +76,9 @@ export default function Stats() {
   if (!data) {
     if (loading) return <StatsHeader />;
     return (
-      <div>
+      <div className="space-y-4">
         <StatsHeader />
-        <div className="index-card index-card--ruled max-w-xl px-6 py-7 sm:px-8">
+        <div className="index-card index-card--ruled px-6 py-6 sm:px-8">
           <h2 className="font-serif text-xl font-semibold">
             {unconfigured
               ? "Connect this device"
@@ -112,6 +116,12 @@ export default function Stats() {
             )}
           </div>
         </div>
+        {outlook && outlook.total > 0 && (
+          <>
+            <p className="label-caps pt-4 text-muted">From this device</p>
+            <LocalPanels outlook={outlook} />
+          </>
+        )}
       </div>
     );
   }
@@ -141,6 +151,12 @@ export default function Stats() {
     const iso = localISO(d);
     days.push({ iso, n: byDay.get(iso)?.n ?? 0, future: d.getTime() > end.getTime() });
   }
+  const weeks = Array.from({ length: WEEKS }, (_, w) => {
+    const month = (i: number) => new Date(days[i * 7].iso + "T12:00").getMonth();
+    return w === 0 || month(w) !== month(w - 1)
+      ? new Date(days[w * 7].iso + "T12:00").toLocaleDateString(undefined, { month: "short" })
+      : "";
+  });
   const maxForecast = Math.max(1, ...forecast.map((f) => f.n));
   const stale = !fresh && error != null;
 
@@ -176,32 +192,38 @@ export default function Stats() {
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[auto_minmax(0,1fr)]">
       <section className="index-card p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="label-caps text-ink-2">Activity</h2>
           <span className="text-13 tabular-nums text-muted">{totalReviews.toLocaleString()} reviews all-time</span>
         </div>
         <div className="flex gap-2">
-          <div className="grid grid-rows-7 gap-1 pt-px text-2xs leading-none text-muted" aria-hidden>
+          <div className="grid grid-rows-7 gap-1 pt-5 text-2xs leading-none text-muted" aria-hidden>
             {["", "Mon", "", "Wed", "", "Fri", ""].map((d, i) => (
-              <span key={i} className="flex h-3.5 items-center">{d}</span>
+              <span key={i} className="flex h-3.5 items-center lg:h-4">{d}</span>
             ))}
           </div>
-          <div
-            ref={heatmapRef}
-            className="grid min-w-0 flex-1 grid-flow-col grid-rows-7 justify-start gap-1 overflow-x-auto pb-1"
-            role="img"
-            aria-label={`Daily reviews over the last ${WEEKS} weeks`}
-          >
-            {days.map(({ iso, n, future }) => (
-              <div
-                key={iso}
-                title={`${iso}: ${n} review${n === 1 ? "" : "s"}`}
-                className={`h-3.5 w-3.5 rounded-[3px] ${future ? "opacity-0" : ""}`}
-                style={{ backgroundColor: heatColor(n) }}
-              />
-            ))}
+          <div ref={heatmapRef} className="min-w-0 flex-1 overflow-x-auto pb-1">
+            {/* month names over the week where each month starts */}
+            <div className="flex h-4 gap-1 text-2xs leading-none text-muted" aria-hidden>
+              {weeks.map((label, i) => (
+                <span key={i} className="w-3.5 shrink-0 overflow-visible whitespace-nowrap lg:w-4">{label}</span>
+              ))}
+            </div>
+            <div
+              className="mt-1 grid grid-flow-col grid-rows-7 justify-start gap-1"
+              role="img"
+              aria-label={`Daily reviews over the last ${WEEKS} weeks`}
+            >
+              {days.map(({ iso, n, future }) => (
+                <div
+                  key={iso}
+                  title={`${iso}: ${n} review${n === 1 ? "" : "s"}`}
+                  className={`h-3.5 w-3.5 rounded-[3px] lg:h-4 lg:w-4 ${future ? "opacity-0" : ""}`}
+                  style={{ backgroundColor: heatColor(n) }}
+                />
+              ))}
+            </div>
           </div>
         </div>
         <div className="mt-3 flex items-center justify-end gap-1 text-2xs text-muted" aria-hidden>
@@ -213,6 +235,7 @@ export default function Stats() {
         </div>
       </section>
 
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className="index-card p-4 sm:p-5">
         <h2 className="label-caps mb-4 text-ink-2">Upcoming · 7 days</h2>
         {forecast.length === 0 ? (
@@ -234,7 +257,34 @@ export default function Stats() {
           </div>
         )}
       </section>
+
+      {outlook && outlook.total > 0 && (
+        <section className="index-card p-4 sm:p-5">
+          <h2 className="label-caps mb-4 flex justify-between text-ink-2">
+            Collection <span className="tabular-nums text-muted">{outlook.total} cards</span>
+          </h2>
+          <CollectionMix mix={outlook.mix} total={outlook.total} />
+        </section>
+      )}
       </div>
+    </div>
+  );
+}
+
+/** What Stats can still say without the server: the schedule and the collection. */
+function LocalPanels({ outlook }: { outlook: Awaited<ReturnType<typeof loadOutlook>> }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <section className="index-card p-4 sm:p-5">
+        <h2 className="label-caps mb-4 text-ink-2">Upcoming · 14 days</h2>
+        <ForecastBars forecast={outlook.forecast} now={new Date()} />
+      </section>
+      <section className="index-card p-4 sm:p-5">
+        <h2 className="label-caps mb-4 flex justify-between text-ink-2">
+          Collection <span className="tabular-nums text-muted">{outlook.total} cards</span>
+        </h2>
+        <CollectionMix mix={outlook.mix} total={outlook.total} />
+      </section>
     </div>
   );
 }
