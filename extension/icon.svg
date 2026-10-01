@@ -1,15 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <!-- "Flip" — the two sides of a flashcard, folded open. Gradient + bright
-       fold for a modern look; reads down to the 16px context-menu size. -->
+  <!-- Monogram "r" — bold white lowercase r on a sky→indigo gradient.
+       Shared with app/public/icon.svg; keep the two in sync.
+       After editing run: node tools/rasterize-icon.mjs -->
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#2dd4bf"/>
-      <stop offset=".5" stop-color="#38bdf8"/>
-      <stop offset="1" stop-color="#6366f1"/>
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#4f46e5"/>
     </linearGradient>
   </defs>
-  <rect width="128" height="128" rx="30" fill="#08080f"/>
-  <path d="M64 22 L24 33 V95 L64 106 Z" fill="#cffafe"/>
-  <path d="M64 22 L104 33 V95 L64 106 Z" fill="url(#g)"/>
-  <line x1="64" y1="20" x2="64" y2="108" stroke="#f0fdff" stroke-width="4"/>
+  <rect width="128" height="128" rx="30" fill="url(#g)"/>
+  <path d="M 42 100 V 44 h 18 v 10 q 5 -8 14 -11 q 8 -3 16 -1 v 19 q -9 -3 -17 0 q -13 4 -13 19 v 20 Z" fill="#ffffff"/>
 </svg>

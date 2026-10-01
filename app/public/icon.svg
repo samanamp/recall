@@ -1,6 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="24" fill="#0f172a"/>
-  <rect x="20" y="28" width="88" height="60" rx="8" fill="#38bdf8"/>
-  <rect x="28" y="44" width="72" height="52" rx="8" fill="#0ea5e9"/>
-  <text x="64" y="86" font-family="ui-monospace, monospace" font-size="38" font-weight="bold" fill="#f8fafc" text-anchor="middle">re</text>
+  <!-- Monogram "r" — bold white lowercase r on a sky→indigo gradient.
+       Shared with extension/icon.svg; keep the two in sync. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="url(#g)"/>
+  <path d="M 42 100 V 44 h 18 v 10 q 5 -8 14 -11 q 8 -3 16 -1 v 19 q -9 -3 -17 0 q -13 4 -13 19 v 20 Z" fill="#ffffff"/>
 </svg>
