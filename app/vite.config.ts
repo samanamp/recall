@@ -13,13 +13,18 @@ export default defineConfig({
       registerType: "autoUpdate",
       // The .apkg importer's SQLite wasm is 660 kB and used at most once per
       // user — fetch it on demand instead of precaching it on every device.
-      workbox: { globIgnores: ["**/sql-wasm-*.wasm"] },
+      // Fonts are precached too, so card typography (Literata) and KaTeX
+      // render the same offline.
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest,woff2}"],
+        globIgnores: ["**/sql-wasm-*.wasm"],
+      },
       manifest: {
         name: "recall",
         short_name: "recall",
         description: "Markdown flashcards with FSRS spaced repetition",
-        theme_color: "#0f172a",
-        background_color: "#0f172a",
+        theme_color: "#101318",
+        background_color: "#101318",
         display: "standalone",
         icons: [{ src: "icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
       },
