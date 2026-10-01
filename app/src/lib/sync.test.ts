@@ -326,7 +326,7 @@ describe("applyState", () => {
     expect(await db.state.get(ID_Y)).toBeDefined();
   });
 
-  it("a delta state response never deletes", async () => {
+  it("a delta state response never deletes rows it doesn't name", async () => {
     server.write(`decks/a/${ID_X}.md`, file(ID_X, "x"));
     server.reviews.set("rx", review("rx", ID_X));
     await syncAll();
@@ -336,6 +336,55 @@ describe("applyState", () => {
     fake.sync.mockImplementationOnce(async (...a) => ({ ...(await real(...a)), stateIsDelta: true }));
     await syncAll();
     expect(await db.state.get(ID_X)).toBeDefined();
+  });
+});
+
+describe("delta sync", () => {
+  it("saves the state watermark with the cursor and sends it next time", async () => {
+    server.write(`decks/a/${ID_X}.md`, file(ID_X, "x"));
+    const real = fake.sync.getMockImplementation()!;
+    fake.sync.mockImplementationOnce(async (...a) => {
+      const resp = await real(...a);
+      return { ...resp, state: [{ card_id: ID_X, due: 1, state: 2, fsrs_json: "{}", updated_at: 5000 }] };
+    });
+    await syncAll();
+    expect(await kvGet("stateWatermark")).toBe(5000);
+    server.seq++; // force a non-"unchanged" round trip
+    await syncAll();
+    expect(fake.sync.mock.calls.at(-1)?.[2]).toBe(5000);
+  });
+
+  it("applies tombstones from a delta and leaves cards it doesn't name", async () => {
+    server.write(`decks/a/${ID_X}.md`, file(ID_X, "x"));
+    server.write(`decks/a/${ID_Y}.md`, file(ID_Y, "y"));
+    server.reviews.set("rx", review("rx", ID_X));
+    server.reviews.set("ry", review("ry", ID_Y));
+    await syncAll();
+    server.seq++;
+    fake.sync.mockImplementationOnce(async () => ({
+      cursor: server.cursor(), reviewCount: 2, accepted: 0, filesUnchanged: true as const,
+      state: [], stateIsDelta: true as const, deletedState: [ID_X],
+      params: { retention: 0.9, weights: null },
+    }));
+    await syncAll();
+    expect(await db.state.get(ID_X)).toBeUndefined();
+    expect(await db.state.get(ID_Y)).toBeDefined();
+  });
+
+  it("filesUnchanged skips the file pull entirely", async () => {
+    server.write(`decks/a/${ID_X}.md`, file(ID_X, "x"));
+    await syncAll();
+    server.seq++;
+    fake.sync.mockImplementationOnce(async () => ({
+      cursor: server.cursor(), reviewCount: 0, accepted: 0, filesUnchanged: true as const,
+      state: [], stateIsDelta: true as const, deletedState: [],
+      params: { retention: 0.9, weights: null },
+    }));
+    const batches = fake.batchFiles.mock.calls.length;
+    expect((await syncAll()).ok).toBe(true);
+    expect(fake.batchFiles.mock.calls.length).toBe(batches);
+    expect(await db.cards.get(ID_X)).toBeDefined();
+    expect(await kvGet("syncCursor")).toBe(server.cursor());
   });
 });
 

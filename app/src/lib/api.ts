@@ -17,6 +17,7 @@ export interface ServerCardState {
   due: number;
   state: number;
   fsrs_json: string | null;
+  updated_at?: number; // epoch ms; the delta-sync watermark
 }
 
 export class ApiError extends Error {
@@ -69,21 +70,25 @@ export const api = {
    */
   sync: (
     reviews: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[],
-    cursor?: string
+    cursor?: string,
+    stateSince?: number
   ) =>
     request<{
       unchanged?: true;
       cursor: string;
+      // Omitted with `filesUnchanged` when the manifest version in our cursor
+      // is still current.
       files?: ManifestFile[];
-      // Today `state` is always the whole card_state table, which lets the
-      // client drop rows the server no longer has. A future delta response
-      // must set this so the client knows absence ≠ deletion.
+      filesUnchanged?: true;
+      // The whole card_state table, or with `stateIsDelta` only rows changed
+      // since `stateSince`; then `deletedState` lists rows removed since.
       state?: ServerCardState[];
       stateIsDelta?: true;
+      deletedState?: string[];
       params?: FsrsParams;
       reviewCount: number;
       accepted: number;
-    }>("/sync", { method: "POST", body: JSON.stringify({ reviews, cursor }) }),
+    }>("/sync", { method: "POST", body: JSON.stringify({ reviews, cursor, delta: true, stateSince }) }),
 
   /** Undo: remove one review server-side; the worker re-derives card state. */
   deleteReview: (id: string) =>

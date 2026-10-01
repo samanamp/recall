@@ -243,8 +243,16 @@ app.put("/media", async (c) => {
 // Clients echo back the `cursor` we return; when it still matches (the
 // overwhelmingly common heartbeat case) the response is ~60 bytes instead
 // of the full manifest + state payload.
+// Overlap for delta state queries: Worker instances' clocks can disagree by a little.
+const STATE_SKEW_MS = 10_000;
+
 app.post("/sync", async (c) => {
-  const { reviews, cursor } = await c.req.json<{ reviews?: unknown; cursor?: string }>();
+  const { reviews, cursor, delta, stateSince } = await c.req.json<{
+    reviews?: unknown;
+    cursor?: string;
+    delta?: boolean; // client understands filesUnchanged / stateIsDelta
+    stateSince?: number; // highest card_state.updated_at the client has applied
+  }>();
   const batch = checkReviewBatch(reviews ?? []);
   if (typeof batch === "string") return c.json({ error: batch }, 400);
 
@@ -285,13 +293,36 @@ app.post("/sync", async (c) => {
     });
   }
 
-  const state = (await c.env.DB.prepare("SELECT * FROM card_state").all()).results;
+  const reviewCount = reviewStat?.review_count ?? 0;
+  if (!delta) {
+    // Older clients and the extension: the whole table, as before.
+    const state = (await c.env.DB.prepare("SELECT * FROM card_state").all()).results;
+    return c.json({ files, state, params, cursor: current, reviewCount, accepted: batch.valid.length });
+  }
+
+  // Delta clients get only what changed. Files are omitted when the manifest
+  // version in their cursor still matches; state is rows updated after their
+  // watermark (minus a small overlap for clock skew between Worker instances;
+  // re-applying a row is harmless), plus tombstones for deleted rows.
+  const filesUnchanged = cursor !== undefined && cursor.split(":")[0] === String(manifest?.version ?? 1);
+  const since = Number.isFinite(stateSince) ? Math.max(0, Number(stateSince) - STATE_SKEW_MS) : undefined;
+  const [stateRows, deletedRows] =
+    since === undefined
+      ? [(await c.env.DB.prepare("SELECT * FROM card_state").all()).results, []]
+      : await Promise.all([
+          c.env.DB.prepare("SELECT * FROM card_state WHERE updated_at > ?").bind(since).all().then((r) => r.results),
+          c.env.DB.prepare("SELECT card_id FROM card_state_tombstones WHERE deleted_at > ?")
+            .bind(since)
+            .all<{ card_id: string }>()
+            .then((r) => r.results.map((t) => t.card_id)),
+        ]);
   return c.json({
-    files,
-    state,
+    ...(filesUnchanged ? { filesUnchanged: true } : { files }),
+    state: stateRows,
+    ...(since === undefined ? {} : { stateIsDelta: true, deletedState: deletedRows }),
     params,
     cursor: current,
-    reviewCount: reviewStat?.review_count ?? 0,
+    reviewCount,
     accepted: batch.valid.length,
   });
 });

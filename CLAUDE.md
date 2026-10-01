@@ -20,8 +20,11 @@ ships to devices). `worker/wrangler.toml` and `app/.env` are **gitignored**
 (real values live only on this machine; templates are `wrangler.example.toml`
 / `.env.example` — keep placeholders `__DATABASE_ID__` etc. intact, the setup
 wizard and deploy.yml substitute them). Empty worker URL in the app = same
-origin. OSS deployers run `node tools/setup.mjs`; forks auto-deploy via
-`.github/workflows/deploy.yml`.
+origin. OSS deployers run `node tools/setup.mjs`; forks deploy on push via
+`.github/workflows/deploy.yml`, and pull upstream weekly only if the repo
+variable `AUTO_UPDATE` is `'true'` (opt-in: upstream code runs with the
+fork's secrets). Never hard-code worker URLs or tokens in `tools/`; read
+`RECALL_WORKER` / `RECALL_TOKEN` from the environment.
 
 ## Architecture invariants — break these and sync corrupts
 
@@ -33,7 +36,10 @@ origin. OSS deployers run `node tools/setup.mjs`; forks auto-deploy via
 2. **FSRS params (retention + optimized weights) are server-authoritative**
    (D1 `params` table). Worker replay and device schedulers must use the same
    params or due dates diverge. Devices receive them in the `/sync` response
-   and cache in Dexie kv. `PUT /params` re-replays every card.
+   and cache in Dexie kv. `PUT /params` reschedules in pages of 200 cards
+   (`worker/src/params.ts`; the client loops on `cursor`) and writes the
+   params row only with the last page, so an interrupted run leaves the old
+   params and no half-rescheduled state.
 3. **The repo manifest is cached in D1** (`manifest_cache`) because GitHub's
    tree API costs 600–1200ms. Every worker write (`putFile`/`deleteFile`/
    media) must `patchManifest()` synchronously; background revalidation
@@ -51,11 +57,27 @@ origin. OSS deployers run `node tools/setup.mjs`; forks auto-deploy via
    branch race (GitHub 409s); the client drains `pendingFiles` one at a time,
    LWW on conflict. Pulls use `POST /cards/batch` (worker fans out to GitHub
    in parallel) and raw-binary `/media/file` fetches, 6 at a time.
+6. **Every request must fit the free-tier D1 budget (~50 queries).** Review
+   ingest and replay are batched (`worker/src/reviews.ts`: multi-row inserts,
+   `IN (...)` log loads of ≤100 ids, one `batch()` of upserts), so cost is
+   fixed per request, not per card. `worker/test/fakeD1.ts` counts queries;
+   keep a budget assertion on any new route that loops over cards.
+7. **Sync never trusts a single snapshot.** In `app/src/lib/sync.ts`:
+   the cursor (and state watermark) is saved only after files and state are
+   fully applied; queue entries are re-read inside the same transaction
+   before a remote write or a post-push delete; a card is deleted only on its
+   second consecutive absence from the manifest, and never when the manifest
+   is empty; undos of pushed or in-flight reviews go through `pendingUndos`.
+   `app/src/lib/sync.test.ts` interleaves operations to pin each of these.
 
 ## Data flow (steady state = one network call)
 
 `POST /sync` does everything: pending reviews up; manifest + card_state +
-params + reviewCount down (~100ms measured). Further calls happen only when
+params + reviewCount down (~100ms measured). Clients that send `delta: true`
+get `filesUnchanged` instead of the manifest when its version hasn't moved,
+and only `card_state` rows updated after their `stateSince` watermark (with a
+10s skew overlap) plus `deletedState` from `card_state_tombstones`; older
+clients and the extension still get the full payload. Further calls happen only when
 the manifest shows changed files. Client is local-first: IndexedDB (Dexie)
 is read/written instantly; queues (`pendingFiles`, `pendingReviews`) drain
 on sync. Auto-sync triggers: launch, focus, online, visibilitychange, 60s
@@ -136,9 +158,10 @@ mobile @2x DPR), WebP q0.8, content-hash dedupe. GIF/SVG pass through.
 
 ## Testing & CI
 
-- `cd app && npx vitest run` — pure-logic tests (cardfile parse/serialize,
-  scheduler behavior, optimizer data prep, image hashing).
-- `cd worker && npx vitest run` — replay determinism/convergence tests.
+- `cd app && npx vitest run` — pure-logic tests plus `sync.test.ts`, which
+  runs sync against `fake-server.ts` on fake-indexeddb.
+- `cd worker && npx vitest run` — replay determinism, routes on a node:sqlite
+  fake D1 with the real migrations, auth, validation and query budgets.
 - GitHub Actions (`.github/workflows/ci.yml`) runs build + typecheck + tests
   for both packages on every push/PR.
 - No integration tests against real GitHub/D1; verify sync changes manually

@@ -235,10 +235,13 @@ async function runSync(): Promise<SyncResult> {
     // everything rather than risk an "unchanged" answer.
     const lastCursor =
       (await db.cards.count()) > 0 ? await kvGet<string>("syncCursor") : undefined;
+    // The state watermark is only meaningful alongside a valid cursor: both
+    // are saved together, after a fully applied response.
+    const stateSince = lastCursor ? await kvGet<number>("stateWatermark") : undefined;
     const reviews = await claimReviews();
     let resp: Awaited<ReturnType<typeof api.sync>>;
     try {
-      resp = await api.sync(reviews, lastCursor);
+      resp = await api.sync(reviews, lastCursor, stateSince);
       await settleReviews(run, reviews);
     } finally {
       releaseReviews(reviews);
@@ -255,13 +258,21 @@ async function runSync(): Promise<SyncResult> {
       await kvSet("fsrsParams", resp.params);
       configureScheduler(resp.params!.retention, resp.params!.weights);
       // Sequential on purpose: applyState must not race the card deletions.
-      const settled = await pullFiles(run, resp.files!);
-      await applyState(run, resp.state!, resp.stateIsDelta === true);
-      remoteHasCards = resp.files!.some((f) => isCardPath(f.path));
+      // With `filesUnchanged` the manifest is the one we already mirror.
+      const settled = resp.filesUnchanged ? true : await pullFiles(run, resp.files!);
+      await applyState(run, resp.state!, resp.stateIsDelta === true, resp.deletedState ?? []);
+      if (!resp.filesUnchanged) remoteHasCards = resp.files!.some((f) => isCardPath(f.path));
       // Deferred deletions (first strike, empty-manifest guard) leave the
       // cursor unset so the next heartbeat pulls in full and re-decides.
       alive(run);
-      if (settled) await kvSet("syncCursor", resp.cursor);
+      if (settled) {
+        const watermark = Math.max(
+          resp.stateIsDelta ? (stateSince ?? 0) : 0,
+          ...resp.state!.map((r) => r.updated_at ?? 0)
+        );
+        await kvSet("stateWatermark", watermark);
+        await kvSet("syncCursor", resp.cursor);
+      }
     }
   } catch (e) {
     result.ok = false;
@@ -659,7 +670,12 @@ function chunk<T>(arr: T[], size: number): T[][] {
  * Adopt server-derived FSRS state. One transaction with bulk ops, so live
  * queries wake once rather than once per card.
  */
-async function applyState(run: Run, state: ServerCardState[], isDelta: boolean): Promise<void> {
+async function applyState(
+  run: Run,
+  state: ServerCardState[],
+  isDelta: boolean,
+  deleted: string[] = []
+): Promise<void> {
   await db.transaction("rw", [db.state, db.pendingReviews, db.pendingUndos], async () => {
     alive(run);
     // Cards with unpushed reviews or undos keep their local (newer) state.
@@ -671,7 +687,12 @@ async function applyState(run: Run, state: ServerCardState[], isDelta: boolean):
       .filter((r) => r.fsrs_json && !dirty.has(r.card_id))
       .map((r) => ({ cardId: r.card_id, due: r.due, state: r.state, fsrsJson: r.fsrs_json! }));
     if (rows.length) await db.state.bulkPut(rows);
-    if (isDelta) return;
+    if (isDelta) {
+      // A delta names its deletions explicitly (server tombstones).
+      const gone = deleted.filter((id) => !dirty.has(id));
+      if (gone.length) await db.state.bulkDelete(gone);
+      return;
+    }
     // A full table: any local row the server lacks is stale — e.g. the card's
     // only review was undone on another device, so it's new again.
     const onServer = new Set(state.map((r) => r.card_id));

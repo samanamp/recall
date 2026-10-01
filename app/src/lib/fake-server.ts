@@ -70,7 +70,8 @@ export class FakeServer {
   /** vi.fn-wrapped implementations, to Object.assign onto the mocked `api`. */
   api() {
     return {
-      sync: vi.fn(async (reviews: Review[], cursor?: string) => {
+      sync: vi.fn(async (reviews: Review[], cursor?: string, stateSince?: number) => {
+        void stateSince; // the fake always answers in full, like an older worker
         this.addReviews(reviews);
         const base = { cursor: this.cursor(), reviewCount: this.reviews.size, accepted: reviews.length };
         if (reviews.length === 0 && cursor === this.cursor()) {
@@ -85,10 +86,12 @@ export class FakeServer {
           cursor: string;
           reviewCount: number;
           accepted: number;
-          files: ManifestFile[];
+          files?: ManifestFile[];
+          filesUnchanged?: true;
           state: ServerCardState[];
           params: { retention: number; weights: number[] | null };
           stateIsDelta?: true;
+          deletedState?: string[];
         };
       }),
       postReviews: vi.fn(async (reviews: Review[]) => {

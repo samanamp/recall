@@ -99,11 +99,21 @@ export async function replayCards(
 ): Promise<void> {
   const logs = await loadLogs(db, cardIds);
   const now = Date.now();
-  const writes = cardIds.map((id) => {
+  const writes = cardIds.flatMap((id) => {
     const card = replayReviews(logs.get(id) ?? [], scheduler);
+    // The tombstone mirrors the state row's existence, so delta syncs can
+    // report deletions (see /sync and migration 0007).
     return card
-      ? upsertState(db, id, card, now)
-      : db.prepare("DELETE FROM card_state WHERE card_id = ?").bind(id);
+      ? [upsertState(db, id, card, now), db.prepare("DELETE FROM card_state_tombstones WHERE card_id = ?").bind(id)]
+      : [
+          db.prepare("DELETE FROM card_state WHERE card_id = ?").bind(id),
+          db
+            .prepare(
+              `INSERT INTO card_state_tombstones (card_id, deleted_at) VALUES (?, ?)
+               ON CONFLICT(card_id) DO UPDATE SET deleted_at = excluded.deleted_at`
+            )
+            .bind(id, now),
+        ];
   });
   const statements = [...writes, ...extra];
   if (statements.length > 0) await db.batch(statements);
