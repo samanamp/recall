@@ -229,7 +229,7 @@ export default function Review() {
           <Markdown text={card.front} className="card-front" />
           {revealed && (
             <div className="answer-reveal">
-              <div className="answer-rule label-caps -mr-5 mb-5 mt-7 sm:-mr-12 sm:mb-6 sm:mt-9">Answer</div>
+              <div className="answer-rule label-caps mb-5 mt-7 sm:mb-6 sm:mt-9">Answer</div>
               <Markdown text={card.back} className="card-back" />
             </div>
           )}
