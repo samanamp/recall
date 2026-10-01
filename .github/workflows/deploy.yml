@@ -1,7 +1,14 @@
 # Auto-deploy for forks. Three ways it runs:
-#   1. push to main        — your own commits, or a "Sync fork" that triggers CI
-#   2. weekly schedule      — pulls upstream and redeploys, fully hands-off
-#   3. "Run workflow" button (workflow_dispatch) — deploy on demand
+#   1. push to main        — your own commits, or a "Sync fork" you clicked
+#   2. weekly schedule      — OPT-IN: pulls upstream and redeploys, hands-off
+#   3. "Run workflow" button (workflow_dispatch) — deploy on demand; tick
+#      "Pull upstream first" to update from upstream in the same run
+#
+# Why the schedule is opt-in: it deploys whatever upstream main holds, with
+# YOUR Cloudflare credentials and against YOUR cards, without you reviewing
+# it. Turn it on only if you trust upstream to that degree: set the repository
+# variable AUTO_UPDATE = true. Otherwise update by reviewing upstream's
+# changes and clicking "Sync fork" (that push triggers a deploy).
 #
 # One-time fork setup:
 #   • Actions tab → enable workflows (forks start with Actions disabled, and
@@ -13,6 +20,8 @@
 #                  CARDS_REPO             (e.g. yourname/recall-decks)
 #                  CARDS_BRANCH           (optional, default main)
 #                  D1_DATABASE_NAME       (optional, default recall)
+#                  AUTO_UPDATE            (optional, "true" enables the weekly
+#                                          upstream sync + deploy)
 #
 # Run `node tools/setup.mjs` once locally first — it creates the D1 database and
 # sets the APP_TOKEN / GITHUB_TOKEN worker secrets (those persist across deploys,
@@ -24,16 +33,22 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      sync_upstream:
+        description: "Pull upstream main first (deploys upstream code with your credentials)"
+        type: boolean
+        default: false
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC — adjust to taste
 
 permissions:
-  contents: write # the scheduled run fast-forwards your fork from upstream
+  contents: write # an upstream sync fast-forwards your fork's main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: ${{ vars.D1_DATABASE_ID != '' }}
+    # Scheduled runs do nothing unless the fork opted in to auto-updates.
+    if: ${{ vars.D1_DATABASE_ID != '' && (github.event_name != 'schedule' || vars.AUTO_UPDATE == 'true') }}
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -42,12 +57,13 @@ jobs:
         with:
           fetch-depth: 0 # need full history to fast-forward from upstream
 
-      # Scheduled / manual runs pull the latest upstream first, then deploy it.
-      # Push runs skip this (the new code is already what triggered them).
-      # --ff-only keeps it safe: if your fork has diverged (local commits on
-      # main), it deploys your current code untouched instead of force-merging.
+      # Opted-in scheduled runs, and manual runs with the box ticked, pull the
+      # latest upstream first, then deploy it. Push runs and plain manual runs
+      # deploy the fork as it is. --ff-only keeps it safe: if your fork has
+      # diverged (local commits on main), it deploys your current code
+      # untouched instead of force-merging.
       - name: Sync from upstream
-        if: github.event_name != 'push'
+        if: ${{ (github.event_name == 'schedule' && vars.AUTO_UPDATE == 'true') || (github.event_name == 'workflow_dispatch' && inputs.sync_upstream) }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

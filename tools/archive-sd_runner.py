@@ -1,11 +1,20 @@
 """Shared runner for the system-design deck import batches."""
 import hashlib
 import json
+import os
 import time
 import urllib.request
 
-W = "https://recall-api.info-d80.workers.dev"
-TOKEN = "saman123"
+def _env(name):
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise SystemExit(f"{name} is not set. Export it first, e.g.\n"
+                         f"  export RECALL_WORKER=https://<your-worker>.workers.dev\n"
+                         f"  export RECALL_TOKEN=<your APP_TOKEN>")
+    return value
+
+W = _env("RECALL_WORKER").rstrip("/")
+TOKEN = _env("RECALL_TOKEN")
 DECK = "system-design"
 EXPORT = "/tmp/sysdesign-export.json"
 

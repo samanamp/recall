@@ -1,34 +1,35 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { fsrs } from "ts-fsrs";
-import { makeCard, sanitizeDeck } from "./cardfile";
+import { bearerAuth } from "./auth";
+import { deckFolders, makeCard, resolveDeck } from "./cardfile";
+import { utf8ToBase64 } from "./encoding";
+import type { Env } from "./env";
 import { buildMessages, DEFAULT_MODEL, parseFlashcards } from "./flashcard";
-import { replayReviews } from "./replay";
 import {
   deleteFile,
   getBlobBase64,
   getFile,
   getRawFile,
-  getTree,
   GitHubError,
   putFile,
-  type GitHubEnv,
 } from "./github";
-
-/** Minimal shape of the Workers AI binding we use (model-agnostic). */
-interface WorkersAI {
-  run(
-    model: string,
-    options: Record<string, unknown>
-  ): Promise<{ response?: string } | string>;
-}
-
-type Env = GitHubEnv & {
-  DB: D1Database;
-  APP_TOKEN: string;
-  AI: WorkersAI;
-  AI_MODEL?: string;
-};
+import {
+  getManifest,
+  patchManifest,
+  readManifestRow,
+  refreshManifest,
+  serveCached,
+} from "./manifest";
+import { allowedOrigin } from "./origins";
+import {
+  getParams,
+  makeScheduler,
+  mergeParams,
+  parseRescheduleCursor,
+  rescheduleStep,
+} from "./params";
+import { checkReviewBatch, deleteReview, ingestReviews, replayCards } from "./reviews";
+import { isBlobSha, isSafePath, parseParamsUpdate } from "./validate";
 
 interface ReviewRow {
   id: string;
@@ -40,23 +41,19 @@ interface ReviewRow {
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.use("*", cors({ origin: "*", allowHeaders: ["Authorization", "Content-Type"] }));
+app.use(
+  "*",
+  cors({
+    origin: (origin, c) =>
+      allowedOrigin(origin, new URL(c.req.url).origin, (c.env as Env).ALLOWED_ORIGINS),
+    allowHeaders: ["Authorization", "Content-Type"],
+  })
+);
 
-// Single-user auth: one shared bearer token.
-app.use("*", async (c, next) => {
-  const auth = c.req.header("Authorization");
-  if (auth !== `Bearer ${c.env.APP_TOKEN}`) {
-    return c.json({ error: "unauthorized" }, 401);
-  }
-  await next();
-});
+app.use("*", bearerAuth());
 
 app.onError((err, c) => {
-  if (err instanceof GitHubError) {
-    // Pass through meaningful GitHub statuses (404 missing, 409/422 conflicts).
-    const status = err.status === 422 ? 409 : err.status;
-    return c.json({ error: err.message }, status as 404 | 409 | 500);
-  }
+  if (err instanceof GitHubError) return githubErrorResponse(c, err);
   console.error(err);
   // Surface the message — "internal error" hides actionable causes like
   // "Too many subrequests" and costs a tail-debugging session to find.
@@ -64,126 +61,21 @@ app.onError((err, c) => {
   return c.json({ error: `internal: ${message.slice(0, 200)}` }, 500);
 });
 
-// ----------------------------------------------------- FSRS parameters
-
-interface FsrsParams {
-  retention: number;
-  weights: number[] | null;
-}
-
-async function getParams(db: D1Database): Promise<FsrsParams> {
-  const row = await db
-    .prepare("SELECT retention, weights FROM params WHERE k = 1")
-    .first<{ retention: number; weights: string | null }>();
-  return {
-    retention: row?.retention ?? 0.9,
-    weights: row?.weights ? (JSON.parse(row.weights) as number[]) : null,
-  };
-}
-
-function makeScheduler(p: FsrsParams): ReturnType<typeof fsrs> {
-  try {
-    return fsrs({ request_retention: p.retention, ...(p.weights ? { w: p.weights } : {}) });
-  } catch {
-    return fsrs({ request_retention: p.retention }); // bad weights — fall back
-  }
-}
-
 /**
- * sync_stats keeps the change cursor and review count O(1): every review
- * insert/delete must bump `seq` (so other devices notice) and adjust
- * `review_count` (so heartbeats never COUNT(*) the log).
+ * 401 is reserved for our own bearer check: the app reads it as "your app
+ * token is wrong". A rejected GitHub PAT is a server-side problem (502), a
+ * GitHub rate limit is temporary (503 + Retry-After). Meaningful statuses
+ * (404 missing, 409/422 conflicts) still pass through.
  */
-async function bumpSyncStats(db: D1Database, inserted: number, deleted = 0): Promise<void> {
-  if (inserted === 0 && deleted === 0) return;
-  await db
-    .prepare("UPDATE sync_stats SET seq = seq + ?, review_count = review_count + ?")
-    .bind(inserted + deleted, inserted - deleted)
-    .run();
-}
-
-// ----------------------------------------------------- manifest cache
-//
-// GitHub's tree API costs 600-1200ms — far too slow to sit on the sync hot
-// path. The cache is served from D1 (~30ms), patched synchronously whenever
-// this worker writes a file, and revalidated against GitHub in the background
-// when older than the TTL (covers edits made directly on GitHub).
-
-const MANIFEST_TTL_MS = 60_000;
-
-interface ManifestFile {
-  path: string;
-  sha: string;
-}
-
-/**
- * Refresh from GitHub. The tree fetch takes ~1s, during which a write may
- * patch the cache — so the write-back is CAS-guarded by `version`: if a patch
- * landed meanwhile, this refresh is discarded (next TTL expiry catches up).
- */
-async function refreshManifest(env: Env, expectedVersion: number | null): Promise<ManifestFile[]> {
-  const tree = await getTree(env);
-  const files = tree
-    .filter((e) => e.path.startsWith("decks/") || e.path.startsWith("media/"))
-    .map((e) => ({ path: e.path, sha: e.sha }));
-  const json = JSON.stringify(files);
-  if (expectedVersion === null) {
-    await env.DB.prepare(
-      `INSERT INTO manifest_cache (k, json, fetched_at, version) VALUES (1, ?, ?, 1)
-       ON CONFLICT(k) DO NOTHING`
-    )
-      .bind(json, Date.now())
-      .run();
-    return files;
+function githubErrorResponse(c: Context, err: GitHubError): Response {
+  if (err.retryAfter !== null) {
+    c.header("Retry-After", String(err.retryAfter));
+    return c.json({ error: "github: rate limited, retry later" }, 503);
   }
-  const current = await env.DB.prepare(
-    "SELECT json FROM manifest_cache WHERE k = 1 AND version = ?"
-  )
-    .bind(expectedVersion)
-    .first<{ json: string }>();
-  if (!current) return files; // a patch landed meanwhile — drop this refresh (CAS)
-  if (current.json === json) {
-    // Content identical: refresh the TTL but DON'T bump version, so sync
-    // cursors stay valid and idle clients keep getting tiny responses.
-    await env.DB.prepare("UPDATE manifest_cache SET fetched_at = ? WHERE k = 1 AND version = ?")
-      .bind(Date.now(), expectedVersion)
-      .run();
-  } else {
-    await env.DB.prepare(
-      `UPDATE manifest_cache SET json = ?, fetched_at = ?, version = version + 1
-       WHERE k = 1 AND version = ?`
-    )
-      .bind(json, Date.now(), expectedVersion)
-      .run();
-  }
-  return files;
-}
-
-async function getManifest(
-  env: Env,
-  waitUntil: (p: Promise<unknown>) => void
-): Promise<ManifestFile[]> {
-  const row = await env.DB.prepare(
-    "SELECT json, fetched_at, version FROM manifest_cache WHERE k = 1"
-  ).first<{ json: string; fetched_at: number; version: number }>();
-  if (!row) return refreshManifest(env, null);
-  if (Date.now() - row.fetched_at > MANIFEST_TTL_MS) {
-    waitUntil(refreshManifest(env, row.version).catch(() => {}));
-  }
-  return JSON.parse(row.json) as ManifestFile[];
-}
-
-/** Keep the cache exact for writes made through this worker. */
-async function patchManifest(env: Env, path: string, sha: string | null): Promise<void> {
-  const row = await env.DB.prepare("SELECT json FROM manifest_cache WHERE k = 1").first<{
-    json: string;
-  }>();
-  if (!row) return;
-  const files = (JSON.parse(row.json) as ManifestFile[]).filter((f) => f.path !== path);
-  if (sha) files.push({ path, sha });
-  await env.DB.prepare("UPDATE manifest_cache SET json = ?, version = version + 1 WHERE k = 1")
-    .bind(JSON.stringify(files))
-    .run();
+  if (err.isAuth) return c.json({ error: "github: token rejected or lacks access" }, 502);
+  if (err.status === 404) return c.json({ error: err.message }, 404);
+  if (err.status === 409 || err.status === 422) return c.json({ error: err.message }, 409);
+  return c.json({ error: err.message }, 502);
 }
 
 // ---------------------------------------------------------------- cards
@@ -206,6 +98,7 @@ app.post("/cards/batch", async (c) => {
   if (!Array.isArray(items) || items.length === 0) {
     return c.json({ error: "bad request" }, 400);
   }
+  if (items.some((it) => !isSafePath(it?.path) || !isBlobSha(it?.sha))) return c.json({ error: "bad item: need a decks/ or media/ path and a git sha" }, 400);
   // Each item is one GitHub subrequest; free tier allows 50 per invocation.
   if (items.length > 45) {
     return c.json({ error: `too many items (${items.length}); max 45 per batch` }, 400);
@@ -230,7 +123,6 @@ app.get("/media/file", async (c) => {
   return new Response(upstream.body, {
     headers: {
       "Content-Type": upstream.headers.get("Content-Type") ?? "application/octet-stream",
-      "Access-Control-Allow-Origin": "*",
     },
   });
 });
@@ -248,7 +140,7 @@ app.put("/cards/file", async (c) => {
   const result = await putFile(
     c.env,
     path,
-    btoa(String.fromCharCode(...new TextEncoder().encode(content))),
+    utf8ToBase64(content),
     message ?? `${sha ? "edit" : "add"} ${path}`,
     sha
   );
@@ -298,17 +190,14 @@ app.post("/cards", async (c) => {
     front?: string;
     back?: string;
   }>();
-  const cleanDeck = sanitizeDeck(deck ?? "");
+  const manifest = await getManifest(c.env, (p) => c.executionCtx.waitUntil(p));
+  const cleanDeck = resolveDeck(deck ?? "", deckFolders(manifest.map((f) => f.path)));
   if (!cleanDeck || typeof front !== "string" || !front.trim()) {
     return c.json({ error: "deck and front are required" }, 400);
   }
   const card = makeCard(cleanDeck, front.trim(), (back ?? "").trim());
-  const result = await putFile(
-    c.env,
-    card.path,
-    btoa(String.fromCharCode(...new TextEncoder().encode(card.content))),
-    `add ${card.path}`
-  );
+  if (!isSafePath(card.path)) return c.json({ error: "bad deck name" }, 400);
+  const result = await putFile(c.env, card.path, utf8ToBase64(card.content), `add ${card.path}`);
   await patchManifest(c.env, card.path, result.sha);
   return c.json({ id: card.id, deck: cleanDeck, path: card.path, sha: result.sha });
 });
@@ -355,31 +244,20 @@ app.put("/media", async (c) => {
 // overwhelmingly common heartbeat case) the response is ~60 bytes instead
 // of the full manifest + state payload.
 app.post("/sync", async (c) => {
-  const { reviews, cursor } = await c.req.json<{
-    reviews?: { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[];
-    cursor?: string;
-  }>();
+  const { reviews, cursor } = await c.req.json<{ reviews?: unknown; cursor?: string }>();
+  const batch = checkReviewBatch(reviews ?? []);
+  if (typeof batch === "string") return c.json({ error: batch }, 400);
 
   const params = await getParams(c.env.DB);
-  const pushed = Array.isArray(reviews) && reviews.length > 0 && reviews.length <= 500;
+  const pushed = batch.valid.length > 0;
 
   if (pushed) {
-    const insert = c.env.DB.prepare(
-      "INSERT OR IGNORE INTO reviews (id, card_id, rating, reviewed_at, device_id) VALUES (?, ?, ?, ?, ?)"
-    );
-    const results = await c.env.DB.batch(
-      reviews.map((r) => insert.bind(r.id, r.cardId, r.rating, r.reviewedAt, r.deviceId))
-    );
-    await bumpSyncStats(c.env.DB, results.reduce((s, r) => s + (r.meta.changes ?? 0), 0));
-    const scheduler = makeScheduler(params);
-    for (const cardId of new Set(reviews.map((r) => r.cardId))) {
-      await replayCard(c.env.DB, cardId, scheduler);
-    }
+    const { touched } = await ingestReviews(c.env.DB, batch.valid);
+    await replayCards(c.env.DB, touched, makeScheduler(params));
   }
 
   const [manifest, paramsRow, reviewStat] = await Promise.all([
-    c.env.DB.prepare("SELECT json, fetched_at, version FROM manifest_cache WHERE k = 1")
-      .first<{ json: string; fetched_at: number; version: number }>(),
+    readManifestRow(c.env.DB),
     c.env.DB.prepare("SELECT updated_at FROM params WHERE k = 1").first<{ updated_at: number }>(),
     // O(1) row instead of COUNT(*) — a heartbeat must not scan the log.
     c.env.DB.prepare("SELECT seq, review_count FROM sync_stats WHERE k = 1")
@@ -388,15 +266,9 @@ app.post("/sync", async (c) => {
 
   // Keep hand-edits-on-GitHub flowing for idle clients: revalidate in the
   // background when stale. A real change bumps version → next cursor differs.
-  let files: ManifestFile[];
-  if (!manifest) {
-    files = await refreshManifest(c.env, null);
-  } else {
-    if (Date.now() - manifest.fetched_at > MANIFEST_TTL_MS) {
-      c.executionCtx.waitUntil(refreshManifest(c.env, manifest.version).catch(() => {}));
-    }
-    files = JSON.parse(manifest.json) as ManifestFile[];
-  }
+  const files = manifest
+    ? serveCached(c.env, manifest, (p) => c.executionCtx.waitUntil(p))
+    : await refreshManifest(c.env, null);
 
   const current = [
     manifest?.version ?? 1,
@@ -420,64 +292,32 @@ app.post("/sync", async (c) => {
     params,
     cursor: current,
     reviewCount: reviewStat?.review_count ?? 0,
-    accepted: pushed ? reviews.length : 0,
+    accepted: batch.valid.length,
   });
 });
-
-function isSafePath(path: string): boolean {
-  return (
-    !path.includes("..") &&
-    !path.startsWith("/") &&
-    (path.startsWith("decks/") || path.startsWith("media/"))
-  );
-}
 
 // -------------------------------------------------------------- reviews
 
 app.post("/reviews", async (c) => {
-  const reviews = await c.req.json<
-    { id: string; cardId: string; rating: number; reviewedAt: number; deviceId: string }[]
-  >();
-  if (!Array.isArray(reviews) || reviews.length === 0 || reviews.length > 500) {
-    return c.json({ error: "bad request" }, 400);
-  }
-
-  const insert = c.env.DB.prepare(
-    "INSERT OR IGNORE INTO reviews (id, card_id, rating, reviewed_at, device_id) VALUES (?, ?, ?, ?, ?)"
-  );
-  const results = await c.env.DB.batch(
-    reviews.map((r) => insert.bind(r.id, r.cardId, r.rating, r.reviewedAt, r.deviceId))
-  );
-  await bumpSyncStats(c.env.DB, results.reduce((s, r) => s + (r.meta.changes ?? 0), 0));
+  const reviews = await c.req.json<unknown>();
+  const batch = checkReviewBatch(reviews);
+  if (typeof batch === "string") return c.json({ error: batch }, 400);
+  if (batch.valid.length + batch.rejected === 0) return c.json({ error: "no reviews" }, 400);
 
   // Recompute derived FSRS state for every touched card by replaying its full
   // log. Handles out-of-order arrival from devices that reviewed offline.
-  const scheduler = makeScheduler(await getParams(c.env.DB));
-  const cardIds = [...new Set(reviews.map((r) => r.cardId))];
-  for (const cardId of cardIds) {
-    await replayCard(c.env.DB, cardId, scheduler);
-  }
-  return c.json({ ok: true, accepted: reviews.length });
+  const { touched } = await ingestReviews(c.env.DB, batch.valid);
+  await replayCards(c.env.DB, touched, makeScheduler(await getParams(c.env.DB)));
+  return c.json({ ok: true, accepted: batch.valid.length, rejected: batch.rejected });
 });
 
 // Undo support: remove one review and re-derive the card's state.
 app.delete("/reviews", async (c) => {
   const { id } = await c.req.json<{ id: string }>();
-  if (!id) return c.json({ error: "bad request" }, 400);
-  const row = await c.env.DB.prepare("SELECT card_id FROM reviews WHERE id = ?")
-    .bind(id)
-    .first<{ card_id: string }>();
-  if (!row) return c.json({ ok: true, missing: true }); // never pushed or already undone
-  await c.env.DB.prepare("DELETE FROM reviews WHERE id = ?").bind(id).run();
-  await bumpSyncStats(c.env.DB, 0, 1);
+  if (typeof id !== "string" || !id) return c.json({ error: "bad request" }, 400);
   const scheduler = makeScheduler(await getParams(c.env.DB));
-  await replayCard(c.env.DB, row.card_id, scheduler);
-  // Last review gone → replay no-ops; drop the stale derived state (card is new again).
-  const remain = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM reviews WHERE card_id = ?")
-    .bind(row.card_id)
-    .first<{ n: number }>();
-  if (!remain?.n) {
-    await c.env.DB.prepare("DELETE FROM card_state WHERE card_id = ?").bind(row.card_id).run();
+  if (!(await deleteReview(c.env.DB, id, scheduler))) {
+    return c.json({ ok: true, missing: true }); // never pushed or already undone
   }
   return c.json({ ok: true });
 });
@@ -486,8 +326,14 @@ app.delete("/reviews", async (c) => {
 // (Date.getTimezoneOffset() convention: positive west of UTC) so day
 // boundaries match the user's wall clock.
 app.get("/stats", async (c) => {
-  const tz = Number(c.req.query("tz") ?? 0);
+  const tz = clampTzOffset(Number(c.req.query("tz") ?? 0));
   const shift = -tz * 60; // seconds to ADD to epoch for local-day bucketing
+  const now = Date.now();
+  // Compare raw epoch ms with now; shift only when bucketing into local days.
+  // Overdue cards are due today, so they're bucketed there, not dropped.
+  const DAY_MS = 86_400_000;
+  const localToday = Math.floor((now + shift * 1000) / DAY_MS) * DAY_MS - shift * 1000;
+  const horizon = localToday + 14 * DAY_MS;
   const [daily, forecast] = await Promise.all([
     c.env.DB.prepare(
       `SELECT date(reviewed_at/1000 + ?, 'unixepoch') AS day,
@@ -498,15 +344,20 @@ app.get("/stats", async (c) => {
       .bind(shift)
       .all<{ day: string; n: number; again: number }>(),
     c.env.DB.prepare(
-      `SELECT date(due/1000 + ?, 'unixepoch') AS day, COUNT(*) AS n
-       FROM card_state WHERE due/1000 + ? > unixepoch()
-       GROUP BY day ORDER BY day LIMIT 14`
+      `SELECT date(MAX(due, ?)/1000 + ?, 'unixepoch') AS day, COUNT(*) AS n
+       FROM card_state WHERE due < ?
+       GROUP BY day ORDER BY day`
     )
-      .bind(shift, shift)
+      .bind(now, shift, horizon)
       .all<{ day: string; n: number }>(),
   ]);
   return c.json({ daily: daily.results, forecast: forecast.results });
 });
+
+/** Real offsets span UTC-12..UTC+14; anything else is garbage → UTC. */
+function clampTzOffset(tz: number): number {
+  return Number.isFinite(tz) && Math.abs(tz) <= 14 * 60 ? Math.round(tz) : 0;
+}
 
 // Full review log — input for the client-side FSRS optimizer.
 app.get("/reviews/export", async (c) => {
@@ -516,38 +367,19 @@ app.get("/reviews/export", async (c) => {
   return c.json({ reviews: results });
 });
 
-// Update scheduling parameters, then reschedule every card under them.
+// Update scheduling parameters and reschedule every card under them, one
+// page per call (see rescheduleStep): the client repeats the same body plus
+// the returned `cursor` until `done`. Params only change on the last page.
 app.put("/params", async (c) => {
-  const body = await c.req.json<{ retention?: number; weights?: number[] | null }>();
-  const current = await getParams(c.env.DB);
-  const next: FsrsParams = {
-    retention:
-      typeof body.retention === "number" && body.retention >= 0.7 && body.retention <= 0.99
-        ? body.retention
-        : current.retention,
-    weights:
-      body.weights === undefined
-        ? current.weights
-        : Array.isArray(body.weights) && body.weights.every((n) => Number.isFinite(n))
-          ? body.weights
-          : null,
-  };
-  await c.env.DB.prepare(
-    `INSERT INTO params (k, retention, weights, updated_at) VALUES (1, ?, ?, ?)
-     ON CONFLICT(k) DO UPDATE SET retention = excluded.retention,
-       weights = excluded.weights, updated_at = excluded.updated_at`
-  )
-    .bind(next.retention, next.weights ? JSON.stringify(next.weights) : null, Date.now())
-    .run();
+  const body = await c.req.json<unknown>();
+  const update = parseParamsUpdate(body);
+  if (typeof update === "string") return c.json({ error: update }, 400);
+  const cursor = parseRescheduleCursor((body as { cursor?: unknown }).cursor);
+  if (cursor === "invalid") return c.json({ error: "bad cursor" }, 400);
 
-  const scheduler = makeScheduler(next);
-  const { results } = await c.env.DB.prepare("SELECT DISTINCT card_id FROM reviews").all<{
-    card_id: string;
-  }>();
-  for (const row of results) {
-    await replayCard(c.env.DB, row.card_id, scheduler);
-  }
-  return c.json({ ok: true, rescheduled: results.length });
+  const next = mergeParams(await getParams(c.env.DB), update);
+  const step = await rescheduleStep(c.env.DB, next, cursor);
+  return c.json({ ok: true, ...step });
 });
 
 app.get("/reviews", async (c) => {
@@ -564,44 +396,6 @@ app.get("/state", async (c) => {
   const { results } = await c.env.DB.prepare("SELECT * FROM card_state").all();
   return c.json({ state: results });
 });
-
-async function replayCard(
-  db: D1Database,
-  cardId: string,
-  scheduler: ReturnType<typeof fsrs>
-): Promise<void> {
-  const { results } = await db
-    .prepare(
-      "SELECT rating, reviewed_at FROM reviews WHERE card_id = ? ORDER BY reviewed_at, id"
-    )
-    .bind(cardId)
-    .all<{ rating: number; reviewed_at: number }>();
-  const card = replayReviews(results, scheduler);
-  if (!card) return;
-
-  await db
-    .prepare(
-      `INSERT INTO card_state (card_id, due, stability, difficulty, state, reps, lapses, fsrs_json, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(card_id) DO UPDATE SET
-         due = excluded.due, stability = excluded.stability,
-         difficulty = excluded.difficulty, state = excluded.state,
-         reps = excluded.reps, lapses = excluded.lapses,
-         fsrs_json = excluded.fsrs_json, updated_at = excluded.updated_at`
-    )
-    .bind(
-      cardId,
-      card.due.getTime(),
-      card.stability,
-      card.difficulty,
-      card.state,
-      card.reps,
-      card.lapses,
-      JSON.stringify(card),
-      Date.now()
-    )
-    .run();
-}
 
 // The API mounts at /api (the worker also serves the PWA via static assets,
 // same-origin) and at the root (clients pointing a Worker URL directly at the
